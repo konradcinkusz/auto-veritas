@@ -51,14 +51,20 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     const result = offers.filter((offer) => {
-      const priceForFilter = offer.cashPriceEur ?? offer.financedPriceEur ?? 0;
       const matchesSearch =
         !term ||
         offer.name.toLowerCase().includes(term) ||
         offer.variant.toLowerCase().includes(term) ||
         (offer.notes ?? '').toLowerCase().includes(term);
       const matchesLabel = label === 'all' || offer.dgtLabel === label;
-      const matchesPrice = priceForFilter <= maxPrice;
+      // Slider at its ceiling means "no cap" — otherwise offers above the
+      // hard-coded maximum would be invisible with filters untouched. Under a
+      // real cap an offer passes when EITHER known price fits; unpriced offers
+      // drop out of an explicitly capped view.
+      const matchesPrice =
+        maxPrice >= PRICE_MAX ||
+        (offer.cashPriceEur != null && offer.cashPriceEur <= maxPrice) ||
+        (offer.financedPriceEur != null && offer.financedPriceEur <= maxPrice);
       const matchesAge = maxAge === 'all' || offer.daysSinceVerification <= Number(maxAge);
       return matchesSearch && matchesLabel && matchesPrice && matchesAge;
     });
@@ -80,7 +86,12 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
       result.sort((a, b) => {
         const rank = freshnessRank(a.priceFreshness) - freshnessRank(b.priceFreshness);
         if (rank !== 0) return rank;
-        return (a.cashPriceEur ?? a.financedPriceEur ?? 0) - (b.cashPriceEur ?? b.financedPriceEur ?? 0);
+        // Priceless offers sink to the bottom of their freshness band instead
+        // of masquerading as the cheapest.
+        return (
+          (a.cashPriceEur ?? a.financedPriceEur ?? Number.POSITIVE_INFINITY) -
+          (b.cashPriceEur ?? b.financedPriceEur ?? Number.POSITIVE_INFINITY)
+        );
       });
     }
 
@@ -119,7 +130,7 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
           <input
             id="carSearch"
             type="search"
-            placeholder="np. BYD, Toyota, hybryda..."
+            placeholder="np. BYD, Toyota, HEV..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -143,7 +154,10 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
         </div>
         <div className="control-group" style={{ minWidth: 280 }}>
           <label htmlFor="priceRange">
-            Cena (max) <span className="range-value">{maxPrice.toLocaleString('pl-PL')} €</span>
+            Cena (max){' '}
+            <span className="range-value">
+              {maxPrice.toLocaleString('pl-PL')} €{maxPrice >= PRICE_MAX ? ' (bez limitu)' : ''}
+            </span>
           </label>
           <div className="range-wrap">
             <input
@@ -223,6 +237,7 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
                       days={offer.daysSinceVerification}
                       lastVerifiedAt={offer.lastVerifiedAt}
                       offerValidUntil={offer.offerValidUntil}
+                      sourcePublishedAt={offer.sourcePublishedAt}
                       isExpired={offer.isExpired}
                     />
                   </td>

@@ -14,18 +14,29 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [consents, setConsents] = useState<ConsentVersions | null>(null);
+  const [consentsFailed, setConsentsFailed] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Consent versions come from the identity service, never hardcoded: a bumped
+  // version on the server would otherwise reject every registration. A failed
+  // fetch must be visible and retryable — a silently disabled submit button is
+  // a dead end the user cannot diagnose.
+  async function loadConsents() {
+    setConsentsFailed(false);
+    const response = await fetch('/api/auth/consents').catch(() => null);
+    if (response?.ok) {
+      setConsents((await response.json()) as ConsentVersions);
+    } else {
+      setConsents(null);
+      setConsentsFailed(true);
+    }
+  }
+
   useEffect(() => {
-    // Consent versions come from the identity service, never hardcoded: a bumped
-    // version on the server would otherwise reject every registration.
-    fetch('/api/auth/consents')
-      .then((response) => (response.ok ? (response.json() as Promise<ConsentVersions>) : null))
-      .then(setConsents)
-      .catch(() => setConsents(null));
+    void loadConsents();
   }, []);
 
   async function submit(event: FormEvent) {
@@ -112,6 +123,14 @@ export default function RegisterPage() {
             {consents?.privacy ?? '…'}).
           </label>
         </div>
+        {consentsFailed && (
+          <p className="auth-error" role="alert">
+            Nie udało się pobrać wersji regulaminów.{' '}
+            <button className="ghost" type="button" onClick={() => void loadConsents()}>
+              Spróbuj ponownie
+            </button>
+          </p>
+        )}
         {error && (
           <p className="auth-error" role="alert">
             {error}

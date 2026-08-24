@@ -31,7 +31,9 @@ function LoginForm() {
         return;
       }
       const redirect = searchParams.get('redirect');
-      router.push(redirect && redirect.startsWith('/') ? redirect : '/');
+      // Same-origin paths only: '//evil.com' and '/\evil.com' are protocol-relative
+      // URLs the browser would happily leave the site for.
+      router.push(redirect && /^\/(?![/\\])/.test(redirect) ? redirect : '/');
       router.refresh();
       return;
     }
@@ -48,6 +50,10 @@ function LoginForm() {
         setError('Adres e-mail nie został jeszcze potwierdzony. Sprawdź skrzynkę.');
       } else if (response.status === 429) {
         setError('Zbyt wiele prób logowania. Odczekaj chwilę.');
+      } else if (response.status >= 500) {
+        // A 5xx is an outage, not bad credentials — saying "wrong password"
+        // for a down identity service is a lie users act on.
+        setError('Nie udało się połączyć z serwerem. Spróbuj ponownie.');
       } else {
         // Deliberately generic: the UI must not reveal whether the account exists.
         setError('Nieprawidłowy e-mail lub hasło.');

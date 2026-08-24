@@ -3,9 +3,13 @@
 app = "auto-veritas-web"
 primary_region = "waw"
 
+# CI deploys the prebuilt registry image (flyctl deploy --image); flyctl never
+# builds from this file. For a manual build-and-deploy, run from the REPO ROOT:
+#   flyctl deploy . -c flyio/web.fly.toml
+# (fly.toml has no build-context key; the working directory is the context, and
+# this Dockerfile COPYs the workspace's web-kit package from the repo root.)
 [build]
   dockerfile = "../apps/web/Dockerfile"   # relative to THIS file
-  context = ".."                          # repo root — the workspace's web-kit is COPYed in
 
 [env]
   APP_ENV = "production"

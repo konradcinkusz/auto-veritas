@@ -16,15 +16,20 @@ builder.Services.AddSwaggerWithJwt(
 builder.Services.AddOffersDomain();
 builder.Services.AddOffersPersistence(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    // allowIntegerValues: false — a numeric enum payload (e.g. "dgtLabel": 7)
+    // must fail as a 400, not persist an undefined value.
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)));
 
 var app = builder.Build();
 
 app.UseSwaggerWhenEnabled();
 app.UseCors(CorsExtensions.FrontendPolicy);
-app.UseRateLimiter();
+// The limiter must see the authenticated principal: registered before
+// authentication its per-user partition key is always empty and every request
+// shares one bucket keyed by the upstream proxy address.
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapDefaultEndpoints();
 

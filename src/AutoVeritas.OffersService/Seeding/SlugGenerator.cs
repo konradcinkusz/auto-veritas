@@ -7,9 +7,11 @@ public static class SlugGenerator
 {
     /// <summary>
     /// Normalizes a display name into a stable kebab-case identity: lower-cased,
-    /// diacritics stripped, everything non-alphanumeric collapsed to single dashes.
+    /// diacritics stripped, everything non-alphanumeric collapsed to single dashes,
+    /// capped at the Slug column length. Can return an empty string for names with
+    /// no ASCII alphanumerics — callers must treat that as "explicit slug required".
     /// </summary>
-    public static string From(string text)
+    public static string From(string text, int maxLength = 160)
     {
         var normalized = text.Normalize(NormalizationForm.FormD);
         var builder = new StringBuilder(normalized.Length);
@@ -34,6 +36,7 @@ public static class SlugGenerator
             }
         }
 
-        return builder.ToString().Trim('-');
+        var slug = builder.ToString().Trim('-');
+        return slug.Length <= maxLength ? slug : slug[..maxLength].Trim('-');
     }
 }

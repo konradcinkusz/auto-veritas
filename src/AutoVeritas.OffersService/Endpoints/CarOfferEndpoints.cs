@@ -46,8 +46,9 @@ public static class CarOfferEndpoints
         [FromQuery] int limit = 50,
         CancellationToken cancellationToken = default)
     {
-        // Clamping is a DoS control, not a nicety.
-        page = Math.Max(1, page);
+        // Clamping is a DoS control, not a nicety; the page ceiling also keeps
+        // Skip's multiplication inside int range.
+        page = Math.Clamp(page, 1, 100_000);
         limit = Math.Clamp(limit, 1, 100);
 
         var query = db.CarOffers.AsNoTracking();
@@ -68,7 +69,9 @@ public static class CarOfferEndpoints
 
         if (maxPrice is { } price)
         {
-            query = query.Where(offer => (offer.CashPriceEur ?? offer.FinancedPriceEur ?? 0) <= price);
+            // An offer fits the cap when EITHER known price fits; offers with no
+            // price at all drop out of an explicitly price-capped view.
+            query = query.Where(offer => offer.CashPriceEur <= price || offer.FinancedPriceEur <= price);
         }
 
         if (maxVerifiedAgeDays is { } maxAge)
@@ -79,7 +82,9 @@ public static class CarOfferEndpoints
 
         var totalCount = await query.CountAsync(cancellationToken);
         var offers = await query
-            .OrderBy(offer => offer.Name).ThenBy(offer => offer.Variant)
+            // Id as the final key makes the order total, so pages never
+            // duplicate or drop rows that tie on the display keys.
+            .OrderBy(offer => offer.Name).ThenBy(offer => offer.Variant).ThenBy(offer => offer.Id)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -97,21 +102,26 @@ public static class CarOfferEndpoints
             : TypedResults.Ok(CarOfferResponse.From(offer, freshness));
     }
 
-    private static async Task<Results<Created<CarOfferResponse>, Conflict<ProblemDetails>>> CreateAsync(
+    private static async Task<Results<Created<CarOfferResponse>, Conflict<ProblemDetails>, ValidationProblem>> CreateAsync(
         CarOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var slug = request.Slug is { Length: > 0 } explicitSlug
             ? explicitSlug
             : SlugGenerator.From($"{request.Name} {request.Variant}");
+        if (slug.Length == 0)
+        {
+            return OfferWriteGuards.EmptySlug();
+        }
 
         if (await db.CarOffers.AnyAsync(o => o.Slug == slug, cancellationToken))
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "Duplicate slug",
-                Detail = $"A car offer with slug '{slug}' already exists; update it via PUT instead.",
-            });
+            return OfferWriteGuards.DuplicateSlug(slug);
         }
 
         var now = timeProvider.GetUtcNow();
@@ -119,20 +129,43 @@ public static class CarOfferEndpoints
         request.Apply(offer, now);
 
         db.CarOffers.Add(offer);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Two concurrent creates can both pass the existence check; the
+            // unique index is the arbiter and the loser gets the same 409.
+            return OfferWriteGuards.DuplicateSlug(slug);
+        }
 
         var response = CarOfferResponse.From(offer, freshness);
         return TypedResults.Created($"/api/v1/car-offers/{offer.Id}", response);
     }
 
-    private static async Task<Results<Ok<CarOfferResponse>, NotFound>> UpdateAsync(
+    private static async Task<Results<Ok<CarOfferResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> UpdateAsync(
         Guid id, CarOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var offer = await db.CarOffers.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
         if (offer is null)
         {
             return TypedResults.NotFound();
+        }
+
+        if (request.Slug is { Length: > 0 } newSlug && newSlug != offer.Slug)
+        {
+            if (await db.CarOffers.AnyAsync(o => o.Slug == newSlug && o.Id != id, cancellationToken))
+            {
+                return OfferWriteGuards.DuplicateSlug(newSlug);
+            }
+            offer.Slug = newSlug;
         }
 
         request.Apply(offer, timeProvider.GetUtcNow());
@@ -155,10 +188,15 @@ public static class CarOfferEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<Results<Ok<CarOfferResponse>, NotFound>> VerifyAsync(
+    private static async Task<Results<Ok<CarOfferResponse>, NotFound, ValidationProblem>> VerifyAsync(
         Guid id, VerifyRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.VerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var offer = await db.CarOffers.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
         if (offer is null)
         {
@@ -166,7 +204,7 @@ public static class CarOfferEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        offer.LastVerifiedAt = request.VerifiedAt ?? now;
+        offer.LastVerifiedAt = request.VerifiedAt?.ToUniversalTime() ?? now;
         offer.SourceName = request.SourceName ?? offer.SourceName;
         offer.SourceUrl = request.SourceUrl ?? offer.SourceUrl;
         offer.UpdatedAt = now;

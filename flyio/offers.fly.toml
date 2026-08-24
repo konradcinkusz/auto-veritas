@@ -6,9 +6,13 @@
 app = "auto-veritas-offers"
 primary_region = "waw"
 
+# CI deploys the prebuilt registry image (flyctl deploy --image); flyctl never
+# builds from this file. For a manual build-and-deploy, run from the REPO ROOT:
+#   flyctl deploy . -c flyio/offers.fly.toml
+# (fly.toml has no build-context key; the working directory is the context, and
+# this Dockerfile COPYs csproj paths that only resolve from the repo root.)
 [build]
   dockerfile = "../src/AutoVeritas.OffersService/Dockerfile"   # relative to THIS file
-  context = ".."                                               # repo root — csproj COPYs need it
 
 [env]
   ASPNETCORE_ENVIRONMENT = "Production"
@@ -37,10 +41,13 @@ primary_region = "waw"
     soft_limit = 200
 
   [[http_service.checks]]
-    path = "/health"
+    # Readiness, not liveness: /health answers the instant Kestrel binds while
+    # migrations still run in a background service; /health/ready gates on the
+    # schema being initialized and the database answering.
+    path = "/health/ready"
     interval = "30s"
     timeout = "5s"
-    grace_period = "60s"   # covers .NET cold start + first-boot migrations
+    grace_period = "90s"   # covers .NET cold start + first-boot migrations
 
 [[vm]]
   size = "shared-cpu-1x"

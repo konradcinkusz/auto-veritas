@@ -2,7 +2,7 @@ import type { Confidence, DgtLabel, FreshnessStatus, RepaymentStructure } from '
 import { fmtDate, freshnessLabel } from '../lib/format';
 
 export function DgtChip({ label }: { label: DgtLabel }) {
-  const className = label === 'Cero' ? 'tag tag-cero' : 'tag tag-eco';
+  const className = label === 'Cero' ? 'tag tag-cero' : label === 'Eco' ? 'tag tag-eco' : 'tag';
   return <span className={className}>{label === 'Cero' ? 'CERO' : label.toUpperCase()}</span>;
 }
 
@@ -43,14 +43,21 @@ export function FreshnessBadge({
   days,
   lastVerifiedAt,
   offerValidUntil,
+  sourcePublishedAt,
   isExpired,
 }: {
   status: FreshnessStatus;
   days: number;
   lastVerifiedAt: string;
   offerValidUntil: string | null;
+  sourcePublishedAt?: string | null;
   isExpired: boolean;
 }) {
+  // The source's own publication date is the third headline date; showing it
+  // only when it differs from the verification date keeps rows quiet for
+  // checked-live sources while exposing older rate tables and articles.
+  const publishedDiffers =
+    sourcePublishedAt != null && fmtDate(sourcePublishedAt) !== fmtDate(lastVerifiedAt);
   return (
     <div>
       <span className={`fresh-badge fresh-${status}`}>
@@ -58,6 +65,7 @@ export function FreshnessBadge({
         {freshnessLabel(status, days)}
       </span>
       <span className="verify-date">sprawdzono {fmtDate(lastVerifiedAt)}</span>
+      {publishedDiffers && <span className="verify-date">źródło z {fmtDate(sourcePublishedAt)}</span>}
       {offerValidUntil && (
         <span className={`valid-until${isExpired ? ' expired' : ''}`}>
           {isExpired ? 'wygasła ' : 'ważna do '}
@@ -83,9 +91,19 @@ export function SortableTh({
 }) {
   const active = activeKey === sortKey;
   return (
-    <th className={active ? 'sorted' : undefined} onClick={() => onSort(sortKey)}>
-      {label}
-      {active && <span className="arrow">{direction === 1 ? '▲' : '▼'}</span>}
+    <th
+      scope="col"
+      className={active ? 'sorted' : undefined}
+      aria-sort={active ? (direction === 1 ? 'ascending' : 'descending') : undefined}
+    >
+      <button type="button" className="th-sort" onClick={() => onSort(sortKey)}>
+        {label}
+        {active && (
+          <span className="arrow" aria-hidden="true">
+            {direction === 1 ? '▲' : '▼'}
+          </span>
+        )}
+      </button>
     </th>
   );
 }

@@ -115,10 +115,21 @@ export async function handleProxy(
       return response;
     }
 
-    return NextResponse.json({ error: 'All backend candidates failed.' }, { status: 503 });
+    // The rotated pair must land on EVERY exit: dropping it on a failure path
+    // leaves the old, already-revoked refresh token in the cookie, and the next
+    // request trips authservice's replay detection and revokes the whole family.
+    const unavailable = NextResponse.json({ error: 'All backend candidates failed.' }, { status: 503 });
+    if (rotated) {
+      setAuthCookies(unavailable, rotated);
+    }
+    return unavailable;
   } catch (error) {
     if (controller.signal.aborted) {
-      return NextResponse.json({ error: 'Upstream timeout.' }, { status: 504 });
+      const timeout = NextResponse.json({ error: 'Upstream timeout.' }, { status: 504 });
+      if (rotated) {
+        setAuthCookies(timeout, rotated);
+      }
+      return timeout;
     }
     throw error;
   } finally {

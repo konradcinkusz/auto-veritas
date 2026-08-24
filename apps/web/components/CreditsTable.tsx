@@ -50,8 +50,9 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
       const matchesSearch =
         !term || offer.provider.toLowerCase().includes(term) || offer.bestFor.toLowerCase().includes(term);
       const matchesType = type === 'all' || offer.type === type;
-      // Subscriptions have no TIN and always pass the rate filter.
-      const matchesTin = offer.tinPercent == null || offer.tinPercent <= maxTin;
+      // Slider at its ceiling means "no cap"; subscriptions have no TIN and
+      // always pass the rate filter.
+      const matchesTin = maxTin >= TIN_MAX || offer.tinPercent == null || offer.tinPercent <= maxTin;
       const matchesAge = maxAge === 'all' || offer.daysSinceVerification <= Number(maxAge);
       return matchesSearch && matchesType && matchesTin && matchesAge;
     });
@@ -136,7 +137,10 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
         </div>
         <div className="control-group" style={{ minWidth: 280 }}>
           <label htmlFor="tinRange">
-            TIN (max) <span className="range-value">{maxTin.toFixed(1).replace('.', ',')}%</span>
+            TIN (max){' '}
+            <span className="range-value">
+              {maxTin.toFixed(1).replace('.', ',')}%{maxTin >= TIN_MAX ? ' (bez limitu)' : ''}
+            </span>
           </label>
           <div className="range-wrap">
             <input
@@ -228,6 +232,7 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
                       days={offer.daysSinceVerification}
                       lastVerifiedAt={offer.lastVerifiedAt}
                       offerValidUntil={offer.offerValidUntil}
+                      sourcePublishedAt={offer.sourcePublishedAt}
                       isExpired={offer.isExpired}
                     />
                   </td>

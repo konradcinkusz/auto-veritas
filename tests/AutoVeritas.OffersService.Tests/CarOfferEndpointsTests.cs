@@ -86,6 +86,67 @@ public class CarOfferEndpointsTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task A_verification_date_in_the_future_is_rejected_with_400()
+    {
+        AuthenticateAsAgent();
+        var request = ValidRequest();
+        request.LastVerifiedAt = DateTimeOffset.UtcNow.AddDays(2);
+
+        var response = await Client.PostAsJsonAsync("/api/v1/car-offers", request, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_request_omitting_the_dgt_label_or_confidence_is_rejected_with_400()
+    {
+        AuthenticateAsAgent();
+
+        var response = await Client.PostAsJsonAsync("/api/v1/car-offers", new
+        {
+            name = "No Label Car",
+            variant = "SUV / HEV",
+            powerCv = 100,
+            lastVerifiedAt = DateTimeOffset.UtcNow,
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_numeric_enum_payload_is_rejected_with_400()
+    {
+        AuthenticateAsAgent();
+
+        var response = await Client.PostAsJsonAsync("/api/v1/car-offers", new
+        {
+            name = "Numeric Enum Car",
+            variant = "SUV / HEV",
+            dgtLabel = 7,
+            powerCv = 100,
+            priceConfidence = "Confirmed",
+            lastVerifiedAt = DateTimeOffset.UtcNow,
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_local_time_verification_date_is_stored_as_the_same_utc_instant()
+    {
+        AuthenticateAsAgent();
+        var request = ValidRequest();
+        var madrid = new DateTimeOffset(2026, 8, 24, 14, 0, 0, TimeSpan.FromHours(2));
+        request.LastVerifiedAt = madrid;
+
+        var created = await Client.PostAsJsonAsync("/api/v1/car-offers", request, Json);
+        var offer = await created.Content.ReadFromJsonAsync<CarOfferResponse>(Json);
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(madrid.ToUniversalTime(), offer!.LastVerifiedAt);
+    }
+
+    [Fact]
     public async Task Verify_touches_the_verification_timestamp_without_changing_values()
     {
         AuthenticateAsAgent();

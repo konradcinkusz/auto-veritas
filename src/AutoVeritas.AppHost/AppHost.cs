@@ -39,7 +39,7 @@ var offers = builder.AddProject<Projects.AutoVeritas_OffersService>("offers")
     .WithEnvironment("Jwt__Issuer", "https://auth.auto-veritas.local")
     .WithEnvironment("Jwt__Audience", "auto-veritas")
     .WithEnvironment("Cors__AllowedOrigins__0", "http://localhost:3000")
-    .WithHttpHealthCheck("/health");
+    .WithHttpHealthCheck("/health/ready");
 
 builder.AddNextJsApp("web", "../../apps/web")
     .WithHttpEndpoint(port: 3000, targetPort: 3000)

@@ -71,7 +71,11 @@ public class CarOfferRequest
     [StringLength(120)]
     public string Variant { get; set; } = string.Empty;
 
-    public DgtLabel DgtLabel { get; set; }
+    // Trust-critical enums are required-nullable: a plain enum property would
+    // silently default an omitted field to its first member (Cero — the most
+    // permissive label), turning a lazy payload into a false claim.
+    [Required]
+    public DgtLabel? DgtLabel { get; set; }
 
     [Range(1, 2000)]
     public int PowerCv { get; set; }
@@ -94,7 +98,8 @@ public class CarOfferRequest
     [StringLength(500)]
     public string? Notes { get; set; }
 
-    public Confidence PriceConfidence { get; set; }
+    [Required]
+    public Confidence? PriceConfidence { get; set; }
 
     [StringLength(200)]
     public string? SourceName { get; set; }
@@ -114,7 +119,7 @@ public class CarOfferRequest
     {
         offer.Name = Name;
         offer.Variant = Variant;
-        offer.DgtLabel = DgtLabel;
+        offer.DgtLabel = DgtLabel!.Value;
         offer.PowerCv = PowerCv;
         offer.CashPriceEur = CashPriceEur;
         offer.FinancedPriceEur = FinancedPriceEur;
@@ -122,12 +127,15 @@ public class CarOfferRequest
         offer.ReliabilityText = ReliabilityText;
         offer.BootLiters = BootLiters;
         offer.Notes = Notes;
-        offer.PriceConfidence = PriceConfidence;
+        offer.PriceConfidence = PriceConfidence!.Value;
         offer.SourceName = SourceName;
         offer.SourceUrl = SourceUrl;
-        offer.LastVerifiedAt = LastVerifiedAt!.Value;
-        offer.OfferValidUntil = OfferValidUntil;
-        offer.SourcePublishedAt = SourcePublishedAt;
+        // Normalized to UTC at the write boundary: Npgsql rejects any
+        // DateTimeOffset whose offset is not zero, and an agent on the Spanish
+        // market naturally sends +02:00 timestamps.
+        offer.LastVerifiedAt = LastVerifiedAt!.Value.ToUniversalTime();
+        offer.OfferValidUntil = OfferValidUntil?.ToUniversalTime();
+        offer.SourcePublishedAt = SourcePublishedAt?.ToUniversalTime();
         offer.UpdatedAt = now;
     }
 }

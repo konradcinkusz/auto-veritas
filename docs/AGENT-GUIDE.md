@@ -76,7 +76,10 @@ Field rules:
   never "now" by habit. `offerValidUntil` — only if the seller declares one.
   `sourcePublishedAt` — the source's own date (an article's date, not yours).
 - `priceConfidence` / `rateConfidence` — `"Confirmed"` only for values read from
-  an official source; `"Estimated"` renders a "szacunek" chip in the UI.
+  an official source; `"Estimated"` renders a "szacunek" chip in the UI. These,
+  `dgtLabel`, `type` and `repaymentStructure` are **required** — the API rejects
+  payloads that omit them (an omitted enum would otherwise silently default to
+  its most-trusted value), and enum values must be strings, never numbers.
 - `slug` is optional (derived from the name); pass it explicitly if you want a
   stable upsert identity. Duplicate slug ⇒ `409` — update the existing offer.
 - Financing offers additionally carry `repaymentStructure`:

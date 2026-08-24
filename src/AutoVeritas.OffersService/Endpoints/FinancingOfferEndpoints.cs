@@ -46,7 +46,8 @@ public static class FinancingOfferEndpoints
         [FromQuery] int limit = 50,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(1, page);
+        // Clamping is a DoS control; the page ceiling keeps Skip inside int range.
+        page = Math.Clamp(page, 1, 100_000);
         limit = Math.Clamp(limit, 1, 100);
 
         var query = db.FinancingOffers.AsNoTracking();
@@ -78,7 +79,8 @@ public static class FinancingOfferEndpoints
 
         var totalCount = await query.CountAsync(cancellationToken);
         var offers = await query
-            .OrderBy(offer => offer.Provider)
+            // Id as the final key makes the order total across pages.
+            .OrderBy(offer => offer.Provider).ThenBy(offer => offer.Id)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -96,21 +98,26 @@ public static class FinancingOfferEndpoints
             : TypedResults.Ok(FinancingOfferResponse.From(offer, freshness));
     }
 
-    private static async Task<Results<Created<FinancingOfferResponse>, Conflict<ProblemDetails>>> CreateAsync(
+    private static async Task<Results<Created<FinancingOfferResponse>, Conflict<ProblemDetails>, ValidationProblem>> CreateAsync(
         FinancingOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var slug = request.Slug is { Length: > 0 } explicitSlug
             ? explicitSlug
             : SlugGenerator.From(request.Provider);
+        if (slug.Length == 0)
+        {
+            return OfferWriteGuards.EmptySlug();
+        }
 
         if (await db.FinancingOffers.AnyAsync(o => o.Slug == slug, cancellationToken))
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "Duplicate slug",
-                Detail = $"A financing offer with slug '{slug}' already exists; update it via PUT instead.",
-            });
+            return OfferWriteGuards.DuplicateSlug(slug);
         }
 
         var now = timeProvider.GetUtcNow();
@@ -127,20 +134,42 @@ public static class FinancingOfferEndpoints
         request.Apply(offer, now);
 
         db.FinancingOffers.Add(offer);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // The unique index arbitrates concurrent duplicate creates.
+            return OfferWriteGuards.DuplicateSlug(slug);
+        }
 
         var response = FinancingOfferResponse.From(offer, freshness);
         return TypedResults.Created($"/api/v1/financing-offers/{offer.Id}", response);
     }
 
-    private static async Task<Results<Ok<FinancingOfferResponse>, NotFound>> UpdateAsync(
+    private static async Task<Results<Ok<FinancingOfferResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> UpdateAsync(
         Guid id, FinancingOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var offer = await db.FinancingOffers.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
         if (offer is null)
         {
             return TypedResults.NotFound();
+        }
+
+        if (request.Slug is { Length: > 0 } newSlug && newSlug != offer.Slug)
+        {
+            if (await db.FinancingOffers.AnyAsync(o => o.Slug == newSlug && o.Id != id, cancellationToken))
+            {
+                return OfferWriteGuards.DuplicateSlug(newSlug);
+            }
+            offer.Slug = newSlug;
         }
 
         request.Apply(offer, timeProvider.GetUtcNow());
@@ -163,10 +192,15 @@ public static class FinancingOfferEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<Results<Ok<FinancingOfferResponse>, NotFound>> VerifyAsync(
+    private static async Task<Results<Ok<FinancingOfferResponse>, NotFound, ValidationProblem>> VerifyAsync(
         Guid id, VerifyRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (OfferWriteGuards.FutureVerification(request.VerifiedAt, timeProvider) is { } problem)
+        {
+            return problem;
+        }
+
         var offer = await db.FinancingOffers.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
         if (offer is null)
         {
@@ -174,7 +208,7 @@ public static class FinancingOfferEndpoints
         }
 
         var now = timeProvider.GetUtcNow();
-        offer.LastVerifiedAt = request.VerifiedAt ?? now;
+        offer.LastVerifiedAt = request.VerifiedAt?.ToUniversalTime() ?? now;
         offer.SourceName = request.SourceName ?? offer.SourceName;
         offer.SourceUrl = request.SourceUrl ?? offer.SourceUrl;
         offer.UpdatedAt = now;

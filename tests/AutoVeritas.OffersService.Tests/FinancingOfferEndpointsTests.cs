@@ -86,6 +86,40 @@ public class FinancingOfferEndpointsTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task A_payload_omitting_the_repayment_structure_is_rejected_with_400()
+    {
+        AuthenticateAsAgent();
+
+        var response = await Client.PostAsJsonAsync("/api/v1/financing-offers", new
+        {
+            provider = "Structureless Bank",
+            type = "Bank",
+            termDescription = "60 mies.",
+            downPaymentDescription = "Brak",
+            feesDescription = "Brak",
+            bestFor = "Test",
+            rateConfidence = "Confirmed",
+            lastVerifiedAt = DateTimeOffset.UtcNow,
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Updating_to_an_already_taken_slug_returns_409()
+    {
+        AuthenticateAsAgent();
+        var created = await Client.PostAsJsonAsync("/api/v1/financing-offers", ValidRequest(), Json);
+        var offer = await created.Content.ReadFromJsonAsync<FinancingOfferResponse>(Json);
+
+        var update = ValidRequest();
+        update.Slug = "bankinter-consumer-finance";
+        var response = await Client.PutAsJsonAsync($"/api/v1/financing-offers/{offer!.Id}", update, Json);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
     public async Task The_freshness_policy_endpoint_publishes_the_thresholds()
     {
         AuthenticateAsViewer();

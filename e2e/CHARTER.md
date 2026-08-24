@@ -28,10 +28,15 @@ covered at a cheaper tier.
 ## Conventions
 
 - Locators: role + accessible name first, label/text second, `data-testid` as the
-  deliberate fallback. No CSS class chains.
+  deliberate fallback. The two structural `section.card` scopes in the suite are
+  an accepted exception until the sections carry accessible landmarks; no other
+  CSS chains.
 - Waiting: web-first auto-retrying assertions only; fixed sleeps are banned and
   grepped for in CI.
-- Auth: tests that are not about login/registration reuse a stored signed-in
-  context rather than driving the login form each time.
+- Auth: at the current suite size every test registers its own fresh account —
+  registration is itself part of the protected surface, and six tests do not
+  amortize a `storageState` setup. The stored-context pattern becomes mandatory
+  when the core-regression tier lands and login stops being what most tests are
+  about.
 - Data: generated per-test accounts (`e2e-<uuid>@example.test`); the stack the
   suite runs against is ephemeral (compose-per-run), so cleanup is mechanical.

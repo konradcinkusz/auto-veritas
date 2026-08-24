@@ -11,15 +11,23 @@ namespace AutoVeritas.OffersService.Seeding;
 /// The timestamps are real data, not code metadata: LastVerifiedAt is when the agent
 /// checked the value at source, OfferValidUntil is the seller's declared validity
 /// (BYD promotions ran to 31/08/2026, Tesla financing to 30/09/2026), and
-/// SourcePublishedAt is the source's own publication date (e.g. Kelisto's rate table
-/// was "vigentes a 11/08/2026").
+/// SourcePublishedAt is the source's own publication date when it differs from the
+/// verification date.
+///
+/// Seller deadlines carry the Spanish market's +02:00 offset — "valid until 31/08"
+/// means the end of that day in Spain, and rendering or expiring it as a UTC
+/// midnight would move the deadline by a day.
 /// </summary>
 public static class SeedData
 {
     private static readonly DateTimeOffset VerifiedAugust24 = new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset BydOffersEnd = new(2026, 8, 31, 23, 59, 59, TimeSpan.Zero);
-    private static readonly DateTimeOffset TeslaOffersEnd = new(2026, 9, 30, 23, 59, 59, TimeSpan.Zero);
-    private static readonly DateTimeOffset KelistoPublished = new(2026, 8, 11, 0, 0, 0, TimeSpan.Zero);
+
+    // Stored as UTC (Npgsql accepts only offset zero) but defined as the Spanish
+    // end-of-day instant, so the deadline neither renders nor expires a day off.
+    private static readonly DateTimeOffset BydOffersEnd =
+        new DateTimeOffset(2026, 8, 31, 23, 59, 59, TimeSpan.FromHours(2)).ToUniversalTime();
+    private static readonly DateTimeOffset TeslaOffersEnd =
+        new DateTimeOffset(2026, 9, 30, 23, 59, 59, TimeSpan.FromHours(2)).ToUniversalTime();
 
     public static IReadOnlyList<CarOffer> CarOffers() =>
     [
@@ -105,14 +113,12 @@ public static class SeedData
             tin: 4.45m, tae: 4.54m, RepaymentStructure.Linear, "do 120 mies.", "Brak wymaganej",
             "Brak opłaty za otwarcie", monthly: 484, interest: 3050,
             "Najlepszy uniwersalny wybór — dowolna marka, bez ograniczeń",
-            Confidence.Confirmed, "Rastreator", "https://www.rastreator.com/prestamos/coche",
-            published: KelistoPublished),
+            Confidence.Confirmed, "Rastreator", "https://www.rastreator.com/prestamos/coche"),
         Fin("fintonic", "Fintonic", FinancingType.Bank,
             tin: 4.54m, tae: 4.60m, RepaymentStructure.Linear, "Zmienny", "Brak",
             "Niskie", monthly: 486, interest: 3120,
             "Bliski konkurent Bankintera — top 2 wg Rastreator sierpień 2026",
-            Confidence.Confirmed, "Rastreator", "https://www.rastreator.com/prestamos/coche",
-            published: KelistoPublished),
+            Confidence.Confirmed, "Rastreator", "https://www.rastreator.com/prestamos/coche"),
         Fin("bbva-coche-ecologico", "Kredyt 'zielony' — BBVA Coche Ecológico", FinancingType.Green,
             tin: 3.75m, tae: 3.95m, RepaymentStructure.Linear, "do 8 lat", "Zmienna",
             "Niższe niż standardowy kredyt", monthly: 470, interest: 2650,
@@ -163,18 +169,20 @@ public static class SeedData
             validUntil: TeslaOffersEnd),
         Fin("byd-ca-auto-bank", "BYD / CA Auto Bank", FinancingType.Manufacturer,
             tin: 3.20m, tae: 3.40m, RepaymentStructure.Linear, "min. 72 mies.",
-            "Min. 15 000 € finansowane", "Min. 36 mies. trwania umowy", monthly: 410, interest: 2400,
+            // 60-month example figures derived from the TIN (the promo's own
+            // 72-month installment cannot describe the 26k/60m column).
+            "Min. 15 000 € finansowane", "Min. 36 mies. trwania umowy", monthly: 470, interest: 2170,
             "Weź, by odblokować rabat 5k+ €, potem spłać wcześniej (max 1% kary)",
             Confidence.Estimated, "byd.com/es", "https://www.byd.com/es",
             validUntil: BydOffersEnd),
         Fin("mg-santander-open-bank", "MG / Santander–Open Bank", FinancingType.Manufacturer,
             tin: 3.50m, tae: 3.75m, RepaymentStructure.Linear, "Zmienny", "Zmienna",
-            "Ograniczenia koloru/stocku", monthly: 420, interest: 2550,
+            "Ograniczenia koloru/stocku", monthly: 473, interest: 2375,
             "Ta sama strategia co przy BYD",
             Confidence.Estimated, "mg.es", "https://www.mg.es"),
         Fin("omoda-santander-open-bank", "Omoda / Santander–Open Bank", FinancingType.Manufacturer,
             tin: 3.60m, tae: 3.85m, RepaymentStructure.Linear, "Zmienny", "Zmienna",
-            "Min. 36 mies. trwania umowy", monthly: 425, interest: 2600,
+            "Min. 36 mies. trwania umowy", monthly: 474, interest: 2450,
             "Ta sama strategia co przy BYD",
             Confidence.Estimated, "omodajaecoo.es", "https://www.omodajaecoo.es"),
         Fin("toyota-easy", "Toyota Easy", FinancingType.Manufacturer,

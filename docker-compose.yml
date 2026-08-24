@@ -1,0 +1,92 @@
+# The full auto-veritas stack for local evaluation and CI e2e runs.
+#
+#   scripts/generate-jwt-key.sh     # once — writes certs/jwt-signing.dev.pem
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# Credentials in this file are deliberately weak, local-only defaults, overridable
+# through the environment (.env is gitignored; secrets.env.example documents it).
+# Real deployments never use compose — see flyio/.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: autoveritas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoveritas-dev}
+      POSTGRES_DB: autoveritas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/compose/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoveritas"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  authservice:
+    # Version-pinned published image — authservice source is never part of this system.
+    image: ghcr.io/konradcinkusz/authservice:v0.3.1
+    ports:
+      - "8081:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DatabaseProvider: PostgreSQL
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=authdb;Username=autoveritas;Password=${POSTGRES_PASSWORD:-autoveritas-dev}"
+      Database__SchemaMode: EnsureCreated
+      Jwt__PrivateKeyPath: /keys/jwt-signing.dev.pem
+      Jwt__Issuer: https://auth.auto-veritas.local
+      Jwt__Audience: auto-veritas
+      Jwt__PublicBaseUrl: http://localhost:8081
+      Cors__AllowedOrigins__0: http://localhost:3000
+      InitialAdmin__Email: ${INITIAL_ADMIN_EMAIL:-admin@auto-veritas.local}
+      InitialAdmin__Password: ${INITIAL_ADMIN_PASSWORD:-Admin123!}
+    volumes:
+      - ./certs:/keys:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  offers:
+    build:
+      context: .
+      dockerfile: src/AutoVeritas.OffersService/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DatabaseProvider: PostgreSQL
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=offersdb;Username=autoveritas;Password=${POSTGRES_PASSWORD:-autoveritas-dev}"
+      Jwt__MetadataAddress: http://authservice:8080/.well-known/openid-configuration
+      Jwt__Issuer: https://auth.auto-veritas.local
+      Jwt__Audience: auto-veritas
+      Cors__AllowedOrigins__0: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      authservice:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:8080"
+    environment:
+      APP_ENV: compose
+      # Server-side rungs talk over the compose network; the browser only ever
+      # sees http://localhost:3000.
+      AUTH_URL: http://authservice:8080
+      AUTH_JWKS_URL: http://authservice:8080/.well-known/jwks.json
+      AUTH_ISSUER: https://auth.auto-veritas.local
+      AUTH_AUDIENCE: auto-veritas
+      OFFERS_API_URL: http://offers:8080
+    depends_on:
+      authservice:
+        condition: service_started
+      offers:
+        condition: service_started
+
+volumes:
+  pgdata:

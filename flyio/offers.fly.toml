@@ -1,0 +1,47 @@
+# The OffersService: owns offersdb, validates RS256 tokens against the
+# authservice instance's discovery document, and is called only by the web BFF.
+#
+# Secrets (set from CI, documented in SECRETS.md):
+#   ConnectionStrings__DefaultConnection
+app = "auto-veritas-offers"
+primary_region = "waw"
+
+[build]
+  dockerfile = "../src/AutoVeritas.OffersService/Dockerfile"   # relative to THIS file
+  context = ".."                                               # repo root — csproj COPYs need it
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"
+  DatabaseProvider = "PostgreSQL"
+  Database__SchemaMode = "Migrate"
+  Database__MigrationsAssembly = "AutoVeritas.OffersService.Migrations.PostgreSQL"
+  Jwt__MetadataAddress = "https://auto-veritas-authservice.fly.dev/.well-known/openid-configuration"
+  Jwt__Issuer = "https://auto-veritas-authservice.fly.dev"
+  Jwt__Audience = "auto-veritas"
+  Cors__AllowedOrigins__0 = "https://auto-veritas-web.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Scale-to-zero is a recorded cost decision: the only in-request caller is the
+  # web BFF, whose 120 s proxy timeout covers this service's cold start
+  # (INFRASTRUCTURE-ANALYSIS.md has the arithmetic).
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"   # covers .NET cold start + first-boot migrations
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

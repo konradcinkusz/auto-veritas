@@ -1,0 +1,55 @@
+# This system's authservice instance: the published container image, version-pinned,
+# configured entirely from here — the authservice source is never modified or vendored
+# (its friction becomes a recorded decision or an upstream issue).
+#
+# Secrets (set from CI, documented in SECRETS.md):
+#   ConnectionStrings__DefaultConnection, Jwt__PrivateKeyPem, InitialAdmin__Password
+app = "auto-veritas-authservice"
+primary_region = "waw"
+
+[build]
+  image = "ghcr.io/konradcinkusz/authservice:v0.3.1"   # pinned, never :latest
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  DatabaseProvider = "PostgreSQL"
+  # EnsureCreated bootstraps the empty authdb on first boot. It has NO upgrade
+  # path: before bumping the image across a schema-changing release, apply the
+  # DDL from authservice's docs/schema/upgrade/ out of band (recorded as an
+  # operational note in docs/architecture/05-DECISIONS.md).
+  Database__SchemaMode = "EnsureCreated"
+  # The issuer is this instance's public URL (IDENTITY-AND-ACCOUNTS): the value
+  # is stamped into every token's iss claim and every validator fetches the JWKS
+  # from it. Byte-identical across authservice, OffersService and the web app.
+  Jwt__Issuer = "https://auto-veritas-authservice.fly.dev"
+  Jwt__Audience = "auto-veritas"
+  Jwt__PublicBaseUrl = "https://auto-veritas-authservice.fly.dev"
+  Cors__AllowedOrigins__0 = "https://auto-veritas-web.fly.dev"
+  InitialAdmin__Email = "konradcinkusz@gmail.com"
+  Network__ClientIpHeader = "Fly-Client-IP"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Every consumer fetches the JWKS from this instance on cache expiry, which
+  # puts it on the synchronous request path of all validating services.
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[http_service.checks]]
+    # Readiness, not liveness: /health answers the instant Kestrel binds, while
+    # schema initialization is still running in a background service.
+    path = "/health/ready"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

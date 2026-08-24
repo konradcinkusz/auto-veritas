@@ -1,0 +1,12 @@
+{
+  "name": "auto-veritas",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter auto-veritas-web build",
+    "dev": "pnpm --filter auto-veritas-web dev",
+    "lint": "pnpm --filter auto-veritas-web lint && pnpm --filter @auto-veritas/web-kit typecheck",
+    "test": "pnpm --filter @auto-veritas/web-kit test",
+    "e2e": "pnpm --filter auto-veritas-e2e test"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

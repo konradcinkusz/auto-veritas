@@ -39,7 +39,12 @@ services:
       Jwt__PrivateKeyPath: /keys/jwt-signing.dev.pem
       Jwt__Issuer: https://auth.auto-veritas.local
       Jwt__Audience: auto-veritas
-      Jwt__PublicBaseUrl: http://localhost:8081
+      # PublicBaseUrl feeds the discovery document's jwks_uri, and the JWKS is
+      # fetched by the VALIDATORS (the offers container, the web BFF) — so inside
+      # compose it must be the in-network address. localhost:8081 here sent the
+      # offers container to its own loopback for keys: connection refused, empty
+      # key set, and every token 401'd while both services looked healthy.
+      Jwt__PublicBaseUrl: http://authservice:8080
       Cors__AllowedOrigins__0: http://localhost:3000
       InitialAdmin__Email: ${INITIAL_ADMIN_EMAIL:-admin@auto-veritas.local}
       InitialAdmin__Password: ${INITIAL_ADMIN_PASSWORD:-Admin123!}

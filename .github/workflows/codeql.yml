@@ -12,7 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       security-events: write
+      # The upload step reads its own workflow-run metadata; without actions:read
+      # it dies with "Resource not accessible by integration" after a clean scan.
+      actions: read
       contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:

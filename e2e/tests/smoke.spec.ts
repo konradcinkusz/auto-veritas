@@ -61,7 +61,7 @@ test('the financing table exposes the repayment structure, balloon included @smo
   const creditsTable = page.locator('section.card').filter({ hasText: 'Porównanie finansowania' });
   await expect(creditsTable.getByRole('columnheader', { name: 'Struktura' })).toBeVisible();
   const toyotaRow = creditsTable.locator('tbody tr').filter({ hasText: 'Toyota Easy' });
-  await expect(toyotaRow.getByText('BALON')).toBeVisible();
+  await expect(toyotaRow.getByText('BALON', { exact: true })).toBeVisible();
 });
 
 test('an offer added by the agent through the API appears for a viewer @smoke', async ({ page, request }) => {
@@ -72,11 +72,12 @@ test('an offer added by the agent through the API appears for a viewer @smoke', 
   const { accessToken } = (await login.json()) as { accessToken: string };
 
   const slug = `e2e-agent-offer-${randomUUID().slice(0, 8)}`;
+  const offerName = `E2E Nissan Qashqai ${slug.slice(-4)}`;
   const created = await request.post(`${OFFERS_URL}/api/v1/car-offers`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     data: {
       slug,
-      name: `E2E Nissan Qashqai ${slug.slice(-4)}`,
+      name: offerName,
       variant: 'SUV / HEV',
       dgtLabel: 'Eco',
       powerCv: 158,
@@ -88,7 +89,7 @@ test('an offer added by the agent through the API appears for a viewer @smoke', 
   expect(created.status()).toBe(201);
 
   await registerFreshUser(page);
-  await expect(page.getByRole('cell', { name: /E2E Nissan Qashqai/ })).toBeVisible();
+  await expect(page.getByRole('cell', { name: offerName })).toBeVisible();
 });
 
 test('logout ends the session @smoke', async ({ page }) => {

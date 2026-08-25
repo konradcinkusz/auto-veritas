@@ -103,9 +103,17 @@ Freshness thresholds the UI applies: prices 7/30 days, rates 14/45 days, specs
 ## 5. Updating and removing
 
 - `PUT /api/v1/car-offers/{id}` / `PUT /api/v1/financing-offers/{id}` — full
-  replace; send the complete payload with a fresh `lastVerifiedAt`.
+  replace; send the complete payload with a fresh `lastVerifiedAt`. It is a
+  **full** replace — omitting `notes`/`reliabilityScore`/etc. clears them, it
+  does not leave them untouched.
+- Every `PUT` that actually changes a value automatically snapshots the
+  *previous* state into that offer's history — no separate call needed. A
+  viewer sees this as a "Historia" link under each row; you can read it back
+  yourself at `GET /api/v1/car-offers/{id}/history` (newest first, capped at
+  100 entries). Re-sending an unchanged payload writes nothing.
 - `DELETE …/{id}` — only for offers that were *wrong*, not for expired ones:
-  expired offers stay visible, marked, by design.
+  expired offers stay visible, marked, by design. Deleting an offer deletes
+  its history with it.
 - The API never mass-deletes and the seeder never overwrites: your edits always
   survive restarts.
 

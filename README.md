@@ -13,7 +13,9 @@ and when the source itself was published** — with per-data-type staleness
 thresholds (prices 7/30 days, credit rates 14/45 days, specs 6/12 months).
 Stale data is degraded and labelled, never hidden; estimates are marked
 "szacunek"; balloon financing structures are called out as **BALON** instead of
-hiding behind a low monthly rate.
+hiding behind a low monthly rate. Every price/rate change the agent makes is
+kept — a "Historia" panel on each row shows what it used to be, when it
+changed, and who changed it.
 
 Built to the [architecture-standards](https://github.com/konradcinkusz/architecture-standards)
 reference architecture, with [authservice](https://github.com/konradcinkusz/authservice)

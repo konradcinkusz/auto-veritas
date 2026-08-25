@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { fmtEUR, fmtPct, freshnessRank } from '../lib/format';
-import type { FinancingOffer } from '../lib/types';
+import { Fragment, useMemo, useState } from 'react';
+import { fmtDate, fmtEUR, fmtPct, freshnessRank } from '../lib/format';
+import type { FinancingOffer, FinancingOfferHistoryEntry } from '../lib/types';
 import { EstimateChip, FreshnessBadge, SortableTh, StructureChip } from './badges';
+import { HistoryRow, HistoryToggle } from './HistoryPanel';
 
 const TIN_MAX = 10;
+const FINANCING_TABLE_COLUMNS = 11;
 
 type SortKey = 'provider' | 'structure' | 'tin' | 'tae' | 'monthly' | 'interest' | 'verified';
 
@@ -43,6 +45,7 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
   const [maxAge, setMaxAge] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -206,39 +209,87 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((offer) => (
-                <tr key={offer.id} className={freshnessRank(offer.rateFreshness) >= 2 ? 'degraded' : undefined}>
-                  <td className="model-name">
-                    {offer.provider}
-                    <span className="sub">{TYPE_LABELS[offer.type] ?? offer.type}</span>
-                  </td>
-                  <td>
-                    <StructureChip structure={offer.repaymentStructure} />
-                  </td>
-                  <td className="num">
-                    {fmtPct(offer.tinPercent)} <EstimateChip confidence={offer.rateConfidence} />
-                  </td>
-                  <td className="num">{fmtPct(offer.taePercent)}</td>
-                  <td>{offer.termDescription}</td>
-                  <td>{offer.downPaymentDescription}</td>
-                  <td>{offer.feesDescription}</td>
-                  <td className="num price-fin">
-                    {offer.monthlyInstallment60Eur != null ? `${fmtEUR(offer.monthlyInstallment60Eur)}/mies.` : '—'}
-                  </td>
-                  <td className="num gap">{fmtEUR(offer.totalInterest60Eur)}</td>
-                  <td>
-                    <FreshnessBadge
-                      status={offer.rateFreshness}
-                      days={offer.daysSinceVerification}
-                      lastVerifiedAt={offer.lastVerifiedAt}
-                      offerValidUntil={offer.offerValidUntil}
-                      sourcePublishedAt={offer.sourcePublishedAt}
-                      isExpired={offer.isExpired}
-                    />
-                  </td>
-                  <td className="note-cell">{offer.bestFor}</td>
-                </tr>
-              ))}
+              {filtered.map((offer) => {
+                const historyOpen = expandedId === offer.id;
+                return (
+                  <Fragment key={offer.id}>
+                    <tr className={freshnessRank(offer.rateFreshness) >= 2 ? 'degraded' : undefined}>
+                      <td className="model-name">
+                        {offer.provider}
+                        <span className="sub">{TYPE_LABELS[offer.type] ?? offer.type}</span>
+                      </td>
+                      <td>
+                        <StructureChip structure={offer.repaymentStructure} />
+                      </td>
+                      <td className="num">
+                        {fmtPct(offer.tinPercent)} <EstimateChip confidence={offer.rateConfidence} />
+                      </td>
+                      <td className="num">{fmtPct(offer.taePercent)}</td>
+                      <td>{offer.termDescription}</td>
+                      <td>{offer.downPaymentDescription}</td>
+                      <td>{offer.feesDescription}</td>
+                      <td className="num price-fin">
+                        {offer.monthlyInstallment60Eur != null ? `${fmtEUR(offer.monthlyInstallment60Eur)}/mies.` : '—'}
+                      </td>
+                      <td className="num gap">{fmtEUR(offer.totalInterest60Eur)}</td>
+                      <td>
+                        <FreshnessBadge
+                          status={offer.rateFreshness}
+                          days={offer.daysSinceVerification}
+                          lastVerifiedAt={offer.lastVerifiedAt}
+                          offerValidUntil={offer.offerValidUntil}
+                          sourcePublishedAt={offer.sourcePublishedAt}
+                          isExpired={offer.isExpired}
+                        />
+                        <HistoryToggle
+                          open={historyOpen}
+                          onToggle={() => setExpandedId(historyOpen ? null : offer.id)}
+                        />
+                      </td>
+                      <td className="note-cell">{offer.bestFor}</td>
+                    </tr>
+                    {historyOpen && (
+                      <HistoryRow<FinancingOfferHistoryEntry>
+                        colSpan={FINANCING_TABLE_COLUMNS}
+                        fetchUrl={`/api/proxy/offers/api/v1/financing-offers/${offer.id}/history`}
+                        emptyLabel="Brak wcześniejszych zmian — to pierwsza zapisana wersja."
+                        renderEntries={(entries) => (
+                          <table className="history-table">
+                            <thead>
+                              <tr>
+                                <th>Data zmiany</th>
+                                <th>TIN</th>
+                                <th>Struktura</th>
+                                <th>Rata / 60 mies.</th>
+                                <th>Zweryfikowano</th>
+                                <th>Zmienił</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {entries.map((entry) => (
+                                <tr key={entry.id}>
+                                  <td>{fmtDate(entry.recordedAt)}</td>
+                                  <td className="num">{fmtPct(entry.tinPercent)}</td>
+                                  <td>
+                                    <StructureChip structure={entry.repaymentStructure} />
+                                  </td>
+                                  <td className="num">
+                                    {entry.monthlyInstallment60Eur != null
+                                      ? `${fmtEUR(entry.monthlyInstallment60Eur)}/mies.`
+                                      : '—'}
+                                  </td>
+                                  <td>{fmtDate(entry.lastVerifiedAt)}</td>
+                                  <td>{entry.changedByEmail ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

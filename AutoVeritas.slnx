@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AutoVeritas.AppHost/AutoVeritas.AppHost.csproj" />
+    <Project Path="src/AutoVeritas.OffersService.Data/AutoVeritas.OffersService.Data.csproj" />
+    <Project Path="src/AutoVeritas.OffersService.Migrations.PostgreSQL/AutoVeritas.OffersService.Migrations.PostgreSQL.csproj" />
+    <Project Path="src/AutoVeritas.OffersService/AutoVeritas.OffersService.csproj" />
+    <Project Path="src/AutoVeritas.ServiceDefaults/AutoVeritas.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AutoVeritas.OffersService.Tests/AutoVeritas.OffersService.Tests.csproj" />
+  </Folder>
+</Solution>

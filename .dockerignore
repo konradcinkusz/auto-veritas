@@ -1,0 +1,21 @@
+# Exclusion-based (deny-all, then allow): backend images must not ship the
+# frontend, tests or infrastructure, and vice versa.
+*
+
+!global.json
+!Directory.Build.props
+!Directory.Packages.props
+!src/
+!apps/
+!packages/
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!e2e/package.json
+
+# Re-deny build output and local state inside allowed trees.
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/certs/

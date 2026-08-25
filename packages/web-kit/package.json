@@ -1,0 +1,26 @@
+{
+  "name": "@auto-veritas/web-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./middleware": "./src/middleware.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jose": "6.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "next": "15.5.23",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "peerDependencies": {
+    "next": ">=15"
+  }
+}

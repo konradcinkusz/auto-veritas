@@ -1,0 +1,54 @@
+# The OffersService: owns offersdb, validates RS256 tokens against the
+# authservice instance's discovery document, and is called only by the web BFF.
+#
+# Secrets (set from CI, documented in SECRETS.md):
+#   ConnectionStrings__DefaultConnection
+app = "auto-veritas-offers"
+primary_region = "waw"
+
+# CI deploys the prebuilt registry image (flyctl deploy --image); flyctl never
+# builds from this file. For a manual build-and-deploy, run from the REPO ROOT:
+#   flyctl deploy . -c flyio/offers.fly.toml
+# (fly.toml has no build-context key; the working directory is the context, and
+# this Dockerfile COPYs csproj paths that only resolve from the repo root.)
+[build]
+  dockerfile = "../src/AutoVeritas.OffersService/Dockerfile"   # relative to THIS file
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"
+  DatabaseProvider = "PostgreSQL"
+  Database__SchemaMode = "Migrate"
+  Database__MigrationsAssembly = "AutoVeritas.OffersService.Migrations.PostgreSQL"
+  Jwt__MetadataAddress = "https://auto-veritas-authservice.fly.dev/.well-known/openid-configuration"
+  Jwt__Issuer = "https://auto-veritas-authservice.fly.dev"
+  Jwt__Audience = "auto-veritas"
+  Cors__AllowedOrigins__0 = "https://auto-veritas-web.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Scale-to-zero is a recorded cost decision: the only in-request caller is the
+  # web BFF, whose 120 s proxy timeout covers this service's cold start
+  # (INFRASTRUCTURE-ANALYSIS.md has the arithmetic).
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[http_service.checks]]
+    # Readiness, not liveness: /health answers the instant Kestrel binds while
+    # migrations still run in a background service; /health/ready gates on the
+    # schema being initialized and the database answering.
+    path = "/health/ready"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "90s"   # covers .NET cold start + first-boot migrations
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

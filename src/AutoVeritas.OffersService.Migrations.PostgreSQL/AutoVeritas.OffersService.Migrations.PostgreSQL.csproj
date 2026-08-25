@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    One migration set serves one provider: generated DDL differs between PostgreSQL and
+    SQL Server, so each provider gets its own assembly, selected at runtime through
+    Database:MigrationsAssembly. EF provider packages arrive transitively via Data.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>AutoVeritas.OffersService.Migrations.PostgreSQL</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoVeritas.OffersService.Data\AutoVeritas.OffersService.Data.csproj" />
+  </ItemGroup>
+
+</Project>

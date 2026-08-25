@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The DbContext lives in its own project so `dotnet ef` stays acyclic:
+    Data <- Migrations.PostgreSQL <- OffersService. The migrations assembly needs
+    the context type, and the startup project needs the migrations assembly in its
+    output; a context inside the web project would make that graph a cycle.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>AutoVeritas.OffersService</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- DesignTimeDbContextFactory builds its own configuration outside the Web SDK. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+  </ItemGroup>
+
+</Project>

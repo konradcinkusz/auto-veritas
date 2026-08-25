@@ -1,0 +1,249 @@
+# Tag-driven deploy to Fly.io.
+#
+#   push tag v*
+#     ├── test              build + unit tests (fast gate)
+#     ├── detect-changes    diff vs previous tag → per-service flags
+#     │                     a service whose Fly app is MISSING is always selected
+#     ├── build  (matrix)   one image per changed built service → registry.fly.io
+#     └── deploy (ordered)  postgres → authservice → offers → web
+#                           every gate accepts a skipped upstream
+#
+# One-time human setup: a GitHub ENVIRONMENT named `flyio` holding FLY_API_TOKEN,
+# POSTGRES_PASSWORD, JWT_SIGNING_KEY_PEM, INITIAL_ADMIN_PASSWORD (flyio/SECRETS.md).
+name: Deploy to Fly.io
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  FLY_ORG: personal
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test AutoVeritas.slnx -c Release
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @auto-veritas/web-kit test && pnpm build
+
+  detect-changes:
+    runs-on: ubuntu-latest
+    # FLY_API_TOKEN lives in the flyio GitHub ENVIRONMENT; without declaring it
+    # the secret resolves empty in exactly this job.
+    environment: flyio
+    outputs:
+      postgres: ${{ steps.detect.outputs.postgres }}
+      authservice: ${{ steps.detect.outputs.authservice }}
+      offers: ${{ steps.detect.outputs.offers }}
+      web: ${{ steps.detect.outputs.web }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - id: detect
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          if [ -z "$PREV" ]; then
+            echo "No previous tag — selecting everything."
+            CHANGED_FILES=$(git ls-files)
+          else
+            CHANGED_FILES=$(git diff --name-only "$PREV" "$TAG")
+          fi
+          echo "$CHANGED_FILES" > /tmp/changed.txt
+
+          app_missing() {
+            ! flyctl apps list --json | jq -e --arg a "$1" '.[] | select((.Name // .name) == $a)' >/dev/null
+          }
+          changed() {
+            grep -qE "$1" /tmp/changed.txt
+          }
+
+          # Explicit path → service map. Shared roots invalidate every built image.
+          SHARED='^(global\.json|Directory\..*\.props|AutoVeritas\.slnx)'
+          FRONTEND_SHARED='^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json)'
+
+          if changed '^flyio/postgres\.fly\.toml' || app_missing auto-veritas-postgres; then
+            echo "postgres=true" >> "$GITHUB_OUTPUT"; else echo "postgres=false" >> "$GITHUB_OUTPUT"; fi
+          if changed '^flyio/authservice\.fly\.toml' || app_missing auto-veritas-authservice; then
+            echo "authservice=true" >> "$GITHUB_OUTPUT"; else echo "authservice=false" >> "$GITHUB_OUTPUT"; fi
+          if changed '^src/' || changed "$SHARED" || changed '^flyio/offers\.fly\.toml' || app_missing auto-veritas-offers; then
+            echo "offers=true" >> "$GITHUB_OUTPUT"; else echo "offers=false" >> "$GITHUB_OUTPUT"; fi
+          if changed '^(apps|packages)/' || changed "$FRONTEND_SHARED" || changed '^flyio/web\.fly\.toml' || app_missing auto-veritas-web; then
+            echo "web=true" >> "$GITHUB_OUTPUT"; else echo "web=false" >> "$GITHUB_OUTPUT"; fi
+
+          cat "$GITHUB_OUTPUT"
+
+  build:
+    # Build once, deploy many: each image is pushed once as registry.fly.io/<app>:<tag>;
+    # deploy steps only ever `flyctl deploy --image`.
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    environment: flyio
+    if: needs.detect-changes.outputs.offers == 'true' || needs.detect-changes.outputs.web == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: offers
+            app: auto-veritas-offers
+            dockerfile: src/AutoVeritas.OffersService/Dockerfile
+          - service: web
+            app: auto-veritas-web
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.detect-changes.outputs[matrix.service] == 'true'
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: needs.detect-changes.outputs[matrix.service] == 'true'
+      - name: Build and push
+        if: needs.detect-changes.outputs[matrix.service] == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          # registry.fly.io only accepts pushes for existing apps, and app
+          # creation in the deploy jobs is gated on this build succeeding —
+          # without this guard a cold estate deadlocks on its first tag.
+          if ! flyctl apps list --json | jq -e --arg a "${{ matrix.app }}" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            flyctl apps create "${{ matrix.app }}" --org "$FLY_ORG"
+          fi
+          flyctl auth docker
+          docker build -f "${{ matrix.dockerfile }}" -t "registry.fly.io/${{ matrix.app }}:${GITHUB_REF_NAME}" .
+          docker push "registry.fly.io/${{ matrix.app }}:${GITHUB_REF_NAME}"
+
+  deploy-postgres:
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    # Gated on its own config or a missing app, never on every tag:
+    # redeploying Postgres restarts it.
+    if: always() && !cancelled() && needs.detect-changes.outputs.postgres == 'true' && needs.test.result == 'success'
+    environment: flyio
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Ensure app, volume and secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          APP=auto-veritas-postgres
+          if ! flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            flyctl apps create "$APP" --org "$FLY_ORG"
+          fi
+          if ! flyctl volumes list -a "$APP" --json | jq -e '.[] | select(.name == "autoveritas_pgdata")' >/dev/null; then
+            flyctl volumes create autoveritas_pgdata -a "$APP" --region waw --size 3 --yes
+          fi
+          flyctl secrets set -a "$APP" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" --stage
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy -c flyio/postgres.fly.toml --ha=false --wait-timeout 300
+
+  deploy-authservice:
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes, deploy-postgres]
+    # Upstream gates check "unselected", not "skipped": a selected-but-skipped
+    # job means its own ancestor failed, and deploying past a failed ancestor
+    # is exactly what ordered deploys exist to prevent.
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.detect-changes.outputs.authservice == 'true'
+          && needs.test.result == 'success'
+          && (needs.deploy-postgres.result == 'success' || needs.detect-changes.outputs.postgres != 'true') }}
+    environment: flyio
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Ensure app and secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          APP=auto-veritas-authservice
+          if ! flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            flyctl apps create "$APP" --org "$FLY_ORG"
+          fi
+          flyctl secrets set -a "$APP" --stage \
+            "ConnectionStrings__DefaultConnection=Host=auto-veritas-postgres.internal;Port=5432;Database=authdb;Username=autoveritas;Password=${{ secrets.POSTGRES_PASSWORD }}" \
+            "Jwt__PrivateKeyPem=${{ secrets.JWT_SIGNING_KEY_PEM }}" \
+            "InitialAdmin__Password=${{ secrets.INITIAL_ADMIN_PASSWORD }}"
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy -c flyio/authservice.fly.toml --wait-timeout 300
+      - name: Assert the JWKS is non-empty
+        # A missing signing key silently selects HS256 and serves keys: [] while
+        # everything looks healthy — the one thing the health check cannot see.
+        run: |
+          KEYS=$(curl -fsS https://auto-veritas-authservice.fly.dev/.well-known/jwks.json | jq '.keys | length')
+          echo "JWKS keys: $KEYS"
+          test "$KEYS" -ge 1
+
+  deploy-offers:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build, deploy-authservice]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.detect-changes.outputs.offers == 'true'
+          && needs.build.result == 'success'
+          && (needs.deploy-authservice.result == 'success' || needs.detect-changes.outputs.authservice != 'true') }}
+    environment: flyio
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Ensure app and secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          APP=auto-veritas-offers
+          if ! flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            flyctl apps create "$APP" --org "$FLY_ORG"
+          fi
+          flyctl secrets set -a "$APP" --stage \
+            "ConnectionStrings__DefaultConnection=Host=auto-veritas-postgres.internal;Port=5432;Database=offersdb;Username=autoveritas;Password=${{ secrets.POSTGRES_PASSWORD }}"
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --ha=false: one machine by design (cost-shaped, see INFRASTRUCTURE-ANALYSIS.md).
+        run: flyctl deploy -c flyio/offers.fly.toml --image "registry.fly.io/auto-veritas-offers:${GITHUB_REF_NAME}" --ha=false --wait-timeout 300
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build, deploy-offers]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.detect-changes.outputs.web == 'true'
+          && needs.build.result == 'success'
+          && (needs.deploy-offers.result == 'success' || needs.detect-changes.outputs.offers != 'true') }}
+    environment: flyio
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Ensure app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          APP=auto-veritas-web
+          if ! flyctl apps list --json | jq -e --arg a "$APP" '.[] | select((.Name // .name) == $a)' >/dev/null; then
+            flyctl apps create "$APP" --org "$FLY_ORG"
+          fi
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --ha=false: the BFF serializes refresh-token rotation in-process, so a
+        # second machine would race rotations and trip authservice's replay
+        # detection (docs/architecture/05-DECISIONS.md, D-10).
+        run: flyctl deploy -c flyio/web.fly.toml --image "registry.fly.io/auto-veritas-web:${GITHUB_REF_NAME}" --ha=false --wait-timeout 300
+      - name: "Smoke: the product answers"
+        run: curl -fsS https://auto-veritas-web.fly.dev/healthz

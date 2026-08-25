@@ -1,0 +1,46 @@
+# The Next.js product surface. One image promotable across environments: every
+# address below is read server-side at request time, nothing is baked at build.
+app = "auto-veritas-web"
+primary_region = "waw"
+
+# CI deploys the prebuilt registry image (flyctl deploy --image); flyctl never
+# builds from this file. For a manual build-and-deploy, run from the REPO ROOT:
+#   flyctl deploy . -c flyio/web.fly.toml
+# (fly.toml has no build-context key; the working directory is the context, and
+# this Dockerfile COPYs the workspace's web-kit package from the repo root.)
+[build]
+  dockerfile = "../apps/web/Dockerfile"   # relative to THIS file
+
+[env]
+  APP_ENV = "production"
+  # Service-to-service over the public URL: the hop stays inside Fly's network
+  # and the proxy auto-starts a stopped machine, which .internal will not.
+  AUTH_URL = "https://auto-veritas-authservice.fly.dev"
+  AUTH_JWKS_URL = "https://auto-veritas-authservice.fly.dev/.well-known/jwks.json"
+  AUTH_ISSUER = "https://auto-veritas-authservice.fly.dev"
+  AUTH_AUDIENCE = "auto-veritas"
+  OFFERS_API_URL = "https://auto-veritas-offers.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0   # browser-entered only; nothing calls it in-request
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[http_service.checks]]
+    # A dedicated health route: the SPA fallback answers 200 for anything, so a
+    # check on '/' would pass on a white screen.
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

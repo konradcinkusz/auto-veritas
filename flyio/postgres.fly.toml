@@ -1,0 +1,48 @@
+# The system's one Postgres instance: two logical databases (authdb, offersdb),
+# each owned by exactly one service (P3 — co-location is a cost decision, the
+# logical boundary is what must not be crossed).
+#
+# Deploy with --ha=false and exclude from scaling workflows: a volume is a local
+# disk bound to one machine — a second machine would get a second, empty volume.
+app = "auto-veritas-postgres"
+primary_region = "waw"
+
+# No [http_service] and no [[services]] block, deliberately: reached only at
+# auto-veritas-postgres.internal:5432 over 6PN (IPv6). A database with a public
+# listener is a database waiting to be scanned.
+
+[build]
+  # Vanilla pinned image — NOT Fly's postgres-flex, which expects
+  # `fly postgres create` bootstrapping and never initializes under plain deploy.
+  image = "postgres:17-alpine"
+
+[env]
+  POSTGRES_USER = "autoveritas"
+  POSTGRES_DB = "autoveritas"
+  # A SUBDIRECTORY of the mount: the volume root carries lost+found and initdb
+  # refuses a non-empty directory.
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+  POSTGRES_INITDB_ARGS = "--encoding=UTF8 --locale=C"
+# POSTGRES_PASSWORD comes from `fly secrets set`, never from [env].
+
+[[mounts]]
+  source = "autoveritas_pgdata"
+  destination = "/var/lib/postgresql/data"
+  initial_size = "3gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# Runs on first boot only — the postgres entrypoint executes
+# /docker-entrypoint-initdb.d/*.sh only when the data directory is empty.
+[[files]]
+  guest_path = "/docker-entrypoint-initdb.d/01-create-databases.sh"
+  raw_value = """#!/bin/bash
+set -e
+for db in authdb offersdb; do
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    SELECT 'CREATE DATABASE $db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')\\gexec
+EOSQL
+done
+"""

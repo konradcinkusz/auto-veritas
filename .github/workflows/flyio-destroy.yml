@@ -1,0 +1,39 @@
+# Manual teardown, behind a typed confirmation, in reverse dependency order.
+# The data volume is kept unless explicitly requested.
+name: Destroy Fly.io environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "destroy auto-veritas" to proceed'
+        required: true
+      delete_data:
+        description: 'Also destroy the postgres app and its volume'
+        type: boolean
+        default: false
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: flyio
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "destroy auto-veritas" ]; then
+            echo "::error::Confirmation phrase mismatch."
+            exit 1
+          fi
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Destroy stateless apps (reverse dependency order)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          for app in auto-veritas-web auto-veritas-offers auto-veritas-authservice; do
+            flyctl apps destroy "$app" --yes || echo "$app not present"
+          done
+      - name: Destroy postgres (only when explicitly requested)
+        if: inputs.delete_data
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl apps destroy auto-veritas-postgres --yes || echo "postgres not present"

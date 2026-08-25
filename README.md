@@ -62,10 +62,13 @@ With the .NET SDK + Docker, the Aspire AppHost runs the same topology with one
 command (`dotnet run --project src/AutoVeritas.AppHost`) after storing the dev
 key in user-secrets (the AppHost file header shows the exact command).
 
+Both local paths and the deploy are covered end to end, with the gotchas, in
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
 ## Tests
 
 ```bash
-dotnet test AutoVeritas.slnx      # 42 backend tests (SQLite-backed API tests)
+dotnet test AutoVeritas.slnx      # 52 backend tests (SQLite-backed API tests)
 pnpm test && pnpm lint && pnpm build
 pnpm e2e                          # needs the compose stack up
 ```
@@ -85,6 +88,8 @@ order — `.github/workflows/flyio.yml`.
 
 ## Documentation
 
+- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — running it: compose, Aspire, and the
+  Fly.io deploy, in one place
 - [`docs/architecture/`](docs/architecture/) — current state, gap analysis
   against the standards, target architecture, build plan, decisions, and the
   dated deviation register

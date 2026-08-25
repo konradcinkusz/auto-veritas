@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using AutoVeritas.OffersService.Contracts;
 using AutoVeritas.OffersService.Data;
 using AutoVeritas.OffersService.Domain;
+using AutoVeritas.OffersService.Extensions;
 using AutoVeritas.OffersService.Models;
 using AutoVeritas.OffersService.Seeding;
 using AutoVeritas.ServiceDefaults;
@@ -12,10 +14,13 @@ namespace AutoVeritas.OffersService.Endpoints;
 
 public static class FinancingOfferEndpoints
 {
+    private const int MaxHistoryEntries = 100;
+
     public static RouteGroupBuilder MapFinancingOfferReadEndpoints(this RouteGroupBuilder group)
     {
         group.MapGet("/financing-offers", ListAsync).WithName(EndpointNames.ListFinancingOffers);
         group.MapGet("/financing-offers/{id:guid}", GetAsync).WithName(EndpointNames.GetFinancingOffer);
+        group.MapGet("/financing-offers/{id:guid}/history", GetHistoryAsync).WithName(EndpointNames.GetFinancingOfferHistory);
         return group;
     }
 
@@ -98,6 +103,24 @@ public static class FinancingOfferEndpoints
             : TypedResults.Ok(FinancingOfferResponse.From(offer, freshness));
     }
 
+    private static async Task<Results<Ok<IReadOnlyList<FinancingOfferHistoryEntryResponse>>, NotFound>> GetHistoryAsync(
+        Guid id, OffersDbContext db, CancellationToken cancellationToken)
+    {
+        if (!await db.FinancingOffers.AsNoTracking().AnyAsync(o => o.Id == id, cancellationToken))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var rows = await db.FinancingOfferHistories.AsNoTracking()
+            .Where(row => row.FinancingOfferId == id)
+            .OrderByDescending(row => row.RecordedAt)
+            .Take(MaxHistoryEntries)
+            .ToListAsync(cancellationToken);
+
+        IReadOnlyList<FinancingOfferHistoryEntryResponse> response = rows.Select(FinancingOfferHistoryEntryResponse.From).ToList();
+        return TypedResults.Ok(response);
+    }
+
     private static async Task<Results<Created<FinancingOfferResponse>, Conflict<ProblemDetails>, ValidationProblem>> CreateAsync(
         FinancingOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -150,7 +173,7 @@ public static class FinancingOfferEndpoints
 
     private static async Task<Results<Ok<FinancingOfferResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> UpdateAsync(
         Guid id, FinancingOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
-        CancellationToken cancellationToken)
+        ClaimsPrincipal user, CancellationToken cancellationToken)
     {
         if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
         {
@@ -172,7 +195,15 @@ public static class FinancingOfferEndpoints
             offer.Slug = newSlug;
         }
 
-        request.Apply(offer, timeProvider.GetUtcNow());
+        var before = FinancingOfferSnapshot.From(offer);
+        var now = timeProvider.GetUtcNow();
+        request.Apply(offer, now);
+
+        if (before != FinancingOfferSnapshot.From(offer))
+        {
+            db.FinancingOfferHistories.Add(before.ToHistoryRow(offer.Id, now, user.GetEmail()));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(FinancingOfferResponse.From(offer, freshness));

@@ -13,11 +13,25 @@ and when the source itself was published** — with per-data-type staleness
 thresholds (prices 7/30 days, credit rates 14/45 days, specs 6/12 months).
 Stale data is degraded and labelled, never hidden; estimates are marked
 "szacunek"; balloon financing structures are called out as **BALON** instead of
-hiding behind a low monthly rate.
+hiding behind a low monthly rate. Every price/rate change the agent makes is
+kept — a "Historia" panel on each row shows what it used to be, when it
+changed, and who changed it.
 
 Built to the [architecture-standards](https://github.com/konradcinkusz/architecture-standards)
 reference architecture, with [authservice](https://github.com/konradcinkusz/authservice)
 (run from its published container image, `v0.3.1`) as the only identity provider.
+
+## Screenshots
+
+[![Dashboard: car offers with DGT labels, price gaps, reliability scores and per-row verification dates](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
+
+Every row carries its freshness badge and verification date; stale or expired
+offers sink to the bottom instead of disappearing, price estimates are marked
+"szacunek", and balloon financing is called out with a **BALON** chip instead
+of hiding behind the monthly rate. There is no anonymous view — sign-in is
+required before any offer is visible:
+
+<img src="docs/screenshots/login.png" width="420" alt="Login screen">
 
 ## Stack
 
@@ -51,7 +65,7 @@ key in user-secrets (the AppHost file header shows the exact command).
 ## Tests
 
 ```bash
-dotnet test AutoVeritas.slnx      # 36 backend tests (SQLite-backed API tests)
+dotnet test AutoVeritas.slnx      # 42 backend tests (SQLite-backed API tests)
 pnpm test && pnpm lint && pnpm build
 pnpm e2e                          # needs the compose stack up
 ```

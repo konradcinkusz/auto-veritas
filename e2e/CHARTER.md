@@ -17,6 +17,10 @@ covered at a cheaper tier.
 5. An offer added by the agent through the API appears for a signed-in viewer
    after reload.
 6. Logout ends the session: the dashboard redirects to login again.
+7. An offer whose price the agent changes via the API shows the *previous*
+   price in its "Historia" panel for a signed-in viewer — the core trust claim
+   ("you can see when and to what a value changed") actually renders, not just
+   the endpoint answering 200.
 
 ## Non-goals
 

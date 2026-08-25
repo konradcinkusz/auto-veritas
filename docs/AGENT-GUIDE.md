@@ -124,3 +124,122 @@ Freshness thresholds the UI applies: prices 7/30 days, rates 14/45 days, specs
   with per-field errors).
 - Duplicate slugs on create (409).
 - More than 200 requests/min per account (429 `{error, retryAfter}`).
+
+## 7. Bulk ingestion: turning a batch of research into API calls
+
+Sections 1–6 cover one offer at a time. When a separate research pass (a
+different agent, or you in research mode) turns up a whole batch at once,
+don't write one `curl` per offer by hand: have the research agent write its
+findings to a single JSON file, then run `scripts/ingest-offers.sh` against
+it. The script logs in once, reads the current catalog, and decides `POST`
+vs `PUT` per entry itself — you don't pre-sort new-vs-existing yourself.
+
+### 7.1 What to tell the research agent to produce
+
+The research agent's job ends at a JSON file — it never calls the API
+itself. Hand it an instruction block like this one (copy/adapt it — the
+field list has to stay in sync with `scripts/offers-input.example.json`,
+which is the canonical example either way):
+
+```
+Research car offers and financing offers for the Spanish market. For each
+one you find, produce a JSON object with exactly these fields — car offers
+and financing offers are separate shapes. Do not invent field names and do
+not omit a required one.
+
+Car offer:
+  slug              string, REQUIRED — a stable id for this offer, e.g.
+                     "byd-atto-2-dm-i-active" (kebab-case, model + variant).
+                     This is how re-runs tell an update from a new offer —
+                     reuse the exact same slug for the same real-world offer
+                     every time you re-research it. Changing it later makes
+                     the ingest script treat it as a brand-new offer.
+  name              string, required
+  variant           string, required — body style / powertrain, e.g. "SUV / PHEV"
+  dgtLabel          "Cero" | "Eco" | "C" | "B" | "SinEtiqueta", required
+  powerCv           integer, required
+  cashPriceEur      number or null
+  financedPriceEur  number or null
+  reliabilityScore  integer 0-100 or null
+  reliabilityText   string or null
+  bootLiters        integer or null
+  notes             string or null
+  priceConfidence   "Confirmed" | "Estimated", required — "Confirmed" only
+                     if you read the number off an official source page,
+                     "Estimated" otherwise. Never guess and mark it Confirmed.
+  sourceName        string or null — e.g. "byd.com/es"
+  sourceUrl         string or null — the exact page you read the price from
+  lastVerifiedAt    ISO 8601 timestamp, required — when YOU actually checked
+                     this value, never today's date out of habit
+  offerValidUntil   ISO 8601 timestamp or null — only if the seller states one
+  sourcePublishedAt ISO 8601 timestamp or null — the source page's own date,
+                     not yours
+
+Financing offer:
+  slug                    string, REQUIRED — e.g. "revolut"
+  provider                string, required
+  type                    "Bank" | "Captive" | "Fintech" | "Dealer", required
+  tinPercent              number or null
+  taePercent              number or null
+  repaymentStructure      "Linear" | "Balloon" | "Subscription", required —
+                          NEVER guess this one. If you can't confirm it from
+                          the source, say so in your findings instead of
+                          defaulting to "Linear" — an unmarked balloon
+                          structure is the one mistake this product exists
+                          to prevent.
+  termDescription          string, required
+  downPaymentDescription   string, required
+  feesDescription          string, required
+  monthlyInstallment60Eur  number or null
+  totalInterest60Eur       number or null
+  bestFor                  string, required — one line on who this suits
+  rateConfidence           "Confirmed" | "Estimated", required
+  sourceName               string or null
+  sourceUrl                string or null
+  lastVerifiedAt           ISO 8601 timestamp, required
+  offerValidUntil          ISO 8601 timestamp or null
+  sourcePublishedAt        ISO 8601 timestamp or null
+
+Output ONE JSON file (not a chat message, not markdown) shaped exactly like:
+  { "carOffers": [ ... ], "financingOffers": [ ... ] }
+
+See scripts/offers-input.example.json in the repo for a filled-in example.
+```
+
+### 7.2 Running the ingestion
+
+```bash
+AGENT_EMAIL=agent@auto-veritas.local AGENT_PASSWORD='<password>' \
+  ./scripts/ingest-offers.sh path/to/researched-offers.json
+```
+
+`AUTH_URL` / `OFFERS_URL` default to the local compose addresses; override
+both for a production run:
+
+```bash
+AGENT_EMAIL=agent@auto-veritas.local AGENT_PASSWORD='<password>' \
+  AUTH_URL=https://auto-veritas-authservice.fly.dev \
+  OFFERS_URL=https://auto-veritas-offers.fly.dev \
+  ./scripts/ingest-offers.sh path/to/researched-offers.json
+```
+
+What it does, in order:
+
+1. Logs in once with `AGENT_EMAIL` / `AGENT_PASSWORD`.
+2. `GET`s the full existing catalog for car offers and financing offers
+   (paginated automatically past the 100-item page cap) and builds a
+   slug → id lookup from it.
+3. For every entry in the input file: if its `slug` is already in that
+   lookup, `PUT`s the full payload to that offer's id — same rules as §5,
+   including the automatic history snapshot on a real change; otherwise
+   `POST`s it as a new offer.
+4. Prints a per-entity created/updated/failed count and exits non-zero if
+   anything failed, so it's safe to wire into a larger pipeline.
+
+Re-running the same file is safe. Matching entries just `PUT` again, and an
+unchanged payload writes no new history row (§5) — so a partial failure can
+be fixed and the whole file re-run without polluting the timeline with
+no-op entries. The one thing that has to hold on the research side is
+**slug stability**: if the research agent assigns a different slug to the
+same real-world offer on a later run, the script has no way to know it's
+the same offer — it will `POST` a duplicate instead of updating.

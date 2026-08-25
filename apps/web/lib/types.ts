@@ -58,6 +58,30 @@ export interface FinancingOffer {
   isExpired: boolean;
 }
 
+export interface CarOfferHistoryEntry {
+  id: string;
+  recordedAt: string;
+  changedByEmail: string | null;
+  cashPriceEur: number | null;
+  financedPriceEur: number | null;
+  priceConfidence: Confidence;
+  lastVerifiedAt: string;
+  offerValidUntil: string | null;
+}
+
+export interface FinancingOfferHistoryEntry {
+  id: string;
+  recordedAt: string;
+  changedByEmail: string | null;
+  tinPercent: number | null;
+  taePercent: number | null;
+  repaymentStructure: RepaymentStructure;
+  monthlyInstallment60Eur: number | null;
+  rateConfidence: Confidence;
+  lastVerifiedAt: string;
+  offerValidUntil: string | null;
+}
+
 export interface ListResponse<T> {
   items: T[];
   totalCount: number;

@@ -19,6 +19,18 @@ Built to the [architecture-standards](https://github.com/konradcinkusz/architect
 reference architecture, with [authservice](https://github.com/konradcinkusz/authservice)
 (run from its published container image, `v0.3.1`) as the only identity provider.
 
+## Screenshots
+
+[![Dashboard: car offers with DGT labels, price gaps, reliability scores and per-row verification dates](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
+
+Every row carries its freshness badge and verification date; stale or expired
+offers sink to the bottom instead of disappearing, price estimates are marked
+"szacunek", and balloon financing is called out with a **BALON** chip instead
+of hiding behind the monthly rate. There is no anonymous view — sign-in is
+required before any offer is visible:
+
+<img src="docs/screenshots/login.png" width="420" alt="Login screen">
+
 ## Stack
 
 | Piece | What |
@@ -51,7 +63,7 @@ key in user-secrets (the AppHost file header shows the exact command).
 ## Tests
 
 ```bash
-dotnet test AutoVeritas.slnx      # 36 backend tests (SQLite-backed API tests)
+dotnet test AutoVeritas.slnx      # 42 backend tests (SQLite-backed API tests)
 pnpm test && pnpm lint && pnpm build
 pnpm e2e                          # needs the compose stack up
 ```

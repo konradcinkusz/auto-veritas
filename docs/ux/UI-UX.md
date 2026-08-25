@@ -61,8 +61,12 @@ became server-enforced domain rules rather than table copy.
    which financing scenarios; the calculation the owner ran by hand in the
    analysis conversation. Needs a rate-scenario engine over the financing table.
    [product core value]
-3. **Offer detail view** with source links and verification history (the audit
-   trail exists in `updatedAt`/verify events; needs a history table). [trust]
+3. ~~**Offer detail view** with source links and verification history~~ —
+   **built**: `GET /api/v1/{car,financing}-offers/{id}/history` plus a
+   "Historia" toggle per row expanding a compact table of every prior value
+   (date changed, old price/rate, who changed it). See [D-13]. Still open: a
+   dedicated detail view with source links is not built — today the history
+   panel is the only per-offer drill-down.
 4. **2FA challenge flow** in the login page (authservice already supports it).
    [D-12]
 5. **Per-column freshness** — a price verified yesterday but a spec from a year

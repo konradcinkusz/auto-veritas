@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using AutoVeritas.OffersService.Contracts;
 using AutoVeritas.OffersService.Data;
 using AutoVeritas.OffersService.Domain;
+using AutoVeritas.OffersService.Extensions;
 using AutoVeritas.OffersService.Models;
 using AutoVeritas.OffersService.Seeding;
 using AutoVeritas.ServiceDefaults;
@@ -12,10 +14,16 @@ namespace AutoVeritas.OffersService.Endpoints;
 
 public static class CarOfferEndpoints
 {
+    // History entries only ever grow one row per real change; a hard cap
+    // protects the response without needing full pagination for what should
+    // stay a short list per offer.
+    private const int MaxHistoryEntries = 100;
+
     public static RouteGroupBuilder MapCarOfferReadEndpoints(this RouteGroupBuilder group)
     {
         group.MapGet("/car-offers", ListAsync).WithName(EndpointNames.ListCarOffers);
         group.MapGet("/car-offers/{id:guid}", GetAsync).WithName(EndpointNames.GetCarOffer);
+        group.MapGet("/car-offers/{id:guid}/history", GetHistoryAsync).WithName(EndpointNames.GetCarOfferHistory);
         return group;
     }
 
@@ -102,6 +110,24 @@ public static class CarOfferEndpoints
             : TypedResults.Ok(CarOfferResponse.From(offer, freshness));
     }
 
+    private static async Task<Results<Ok<IReadOnlyList<CarOfferHistoryEntryResponse>>, NotFound>> GetHistoryAsync(
+        Guid id, OffersDbContext db, CancellationToken cancellationToken)
+    {
+        if (!await db.CarOffers.AsNoTracking().AnyAsync(o => o.Id == id, cancellationToken))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var rows = await db.CarOfferHistories.AsNoTracking()
+            .Where(row => row.CarOfferId == id)
+            .OrderByDescending(row => row.RecordedAt)
+            .Take(MaxHistoryEntries)
+            .ToListAsync(cancellationToken);
+
+        IReadOnlyList<CarOfferHistoryEntryResponse> response = rows.Select(CarOfferHistoryEntryResponse.From).ToList();
+        return TypedResults.Ok(response);
+    }
+
     private static async Task<Results<Created<CarOfferResponse>, Conflict<ProblemDetails>, ValidationProblem>> CreateAsync(
         CarOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -146,7 +172,7 @@ public static class CarOfferEndpoints
 
     private static async Task<Results<Ok<CarOfferResponse>, NotFound, Conflict<ProblemDetails>, ValidationProblem>> UpdateAsync(
         Guid id, CarOfferRequest request, OffersDbContext db, FreshnessCalculator freshness, TimeProvider timeProvider,
-        CancellationToken cancellationToken)
+        ClaimsPrincipal user, CancellationToken cancellationToken)
     {
         if (OfferWriteGuards.FutureVerification(request.LastVerifiedAt, timeProvider) is { } problem)
         {
@@ -168,7 +194,18 @@ public static class CarOfferEndpoints
             offer.Slug = newSlug;
         }
 
-        request.Apply(offer, timeProvider.GetUtcNow());
+        var before = CarOfferSnapshot.From(offer);
+        var now = timeProvider.GetUtcNow();
+        request.Apply(offer, now);
+
+        // Only a real change earns a history row — a re-sent, identical PUT
+        // (or one that only nudges CreatedAt/UpdatedAt-style bookkeeping,
+        // which never lands in the snapshot) must not pollute the timeline.
+        if (before != CarOfferSnapshot.From(offer))
+        {
+            db.CarOfferHistories.Add(before.ToHistoryRow(offer.Id, now, user.GetEmail()));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok(CarOfferResponse.From(offer, freshness));

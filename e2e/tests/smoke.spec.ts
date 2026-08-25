@@ -92,6 +92,58 @@ test('an offer added by the agent through the API appears for a viewer @smoke', 
   await expect(page.getByRole('cell', { name: offerName })).toBeVisible();
 });
 
+test('a changed price shows in the offer\'s history panel for a viewer @smoke', async ({ page, request }) => {
+  const login = await request.post(`${AUTH_URL}/api/v1/auth/login`, {
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
+  const { accessToken } = (await login.json()) as { accessToken: string };
+  const authHeader = { Authorization: `Bearer ${accessToken}` };
+
+  const slug = `e2e-history-offer-${randomUUID().slice(0, 8)}`;
+  const offerName = `E2E History Kia Niro ${slug.slice(-4)}`;
+  const created = await request.post(`${OFFERS_URL}/api/v1/car-offers`, {
+    headers: authHeader,
+    data: {
+      slug,
+      name: offerName,
+      variant: 'SUV / HEV',
+      dgtLabel: 'Eco',
+      powerCv: 141,
+      cashPriceEur: 29900,
+      priceConfidence: 'Confirmed',
+      lastVerifiedAt: new Date().toISOString(),
+    },
+  });
+  const { id } = (await created.json()) as { id: string };
+
+  const updated = await request.put(`${OFFERS_URL}/api/v1/car-offers/${id}`, {
+    headers: authHeader,
+    data: {
+      name: offerName,
+      variant: 'SUV / HEV',
+      dgtLabel: 'Eco',
+      powerCv: 141,
+      cashPriceEur: 28400,
+      priceConfidence: 'Confirmed',
+      lastVerifiedAt: new Date().toISOString(),
+    },
+  });
+  expect(updated.status()).toBe(200);
+
+  await registerFreshUser(page);
+  const row = page.locator('tbody tr', { hasText: offerName });
+  await expect(row.getByText('28 400')).toBeVisible();
+
+  await row.getByRole('button', { name: 'Historia' }).click();
+  // Native <table> rows/cells carry implicit ARIA roles, so the history panel
+  // — injected as a nested <table> — is reachable by role without a CSS chain.
+  // exact: true is required: the wrapping <td colSpan> around the nested
+  // table has no ARIA label of its own, so its accessible name falls back to
+  // ALL of its descendant text concatenated — which also contains "29 900 €"
+  // as a substring and would otherwise match too.
+  await expect(page.getByRole('cell', { name: '29 900 €', exact: true })).toBeVisible();
+});
+
 test('logout ends the session @smoke', async ({ page }) => {
   await registerFreshUser(page);
 

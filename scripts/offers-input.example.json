@@ -1,0 +1,62 @@
+{
+  "carOffers": [
+    {
+      "slug": "byd-atto-2-dm-i-active",
+      "name": "BYD Atto 2 DM-i Active",
+      "variant": "SUV / PHEV",
+      "dgtLabel": "Cero",
+      "powerCv": 166,
+      "cashPriceEur": 24990,
+      "financedPriceEur": 20940,
+      "reliabilityScore": 89,
+      "reliabilityText": "Wysoka",
+      "bootLiters": 425,
+      "notes": "Cena spadła po promocji sierpniowej",
+      "priceConfidence": "Confirmed",
+      "sourceName": "byd.com/es",
+      "sourceUrl": "https://www.byd.com/es/car/atto2",
+      "lastVerifiedAt": "2026-08-24T12:00:00Z",
+      "offerValidUntil": "2026-08-31T23:59:59Z",
+      "sourcePublishedAt": "2026-08-24T12:00:00Z"
+    },
+    {
+      "slug": "byd-seal-u-dm-i-boost",
+      "name": "BYD Seal U DM-i Boost",
+      "variant": "SUV / PHEV",
+      "dgtLabel": "Cero",
+      "powerCv": 218,
+      "cashPriceEur": 34990,
+      "financedPriceEur": 29990,
+      "reliabilityScore": 89,
+      "reliabilityText": "Wysoka",
+      "bootLiters": null,
+      "notes": "Segment D; 18,3 kWh, do 90 km na prądzie",
+      "priceConfidence": "Confirmed",
+      "sourceName": "byd.com/es",
+      "sourceUrl": "https://www.byd.com/es/car/sealu",
+      "lastVerifiedAt": "2026-08-24T12:00:00Z",
+      "offerValidUntil": "2026-08-31T23:59:59Z",
+      "sourcePublishedAt": "2026-08-24T12:00:00Z"
+    }
+  ],
+  "financingOffers": [
+    {
+      "slug": "revolut",
+      "provider": "Revolut",
+      "type": "Fintech",
+      "tinPercent": 3.29,
+      "taePercent": 3.40,
+      "repaymentStructure": "Linear",
+      "termDescription": "do 8 lat",
+      "downPaymentDescription": "Brak",
+      "feesDescription": "Brak opłat",
+      "monthlyInstallment60Eur": 460,
+      "totalInterest60Eur": 2380,
+      "bestFor": "Najniższy TIN — do 30 000 € w pełni online",
+      "rateConfidence": "Confirmed",
+      "sourceName": "revolut.com/es-ES",
+      "sourceUrl": "https://www.revolut.com/es-ES/prestamos",
+      "lastVerifiedAt": "2026-08-24T12:00:00Z"
+    }
+  ]
+}

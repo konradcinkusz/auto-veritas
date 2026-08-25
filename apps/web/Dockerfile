@@ -1,6 +1,6 @@
 # Build context MUST be the repository root: the workspace's web-kit package is
 # COPYed in, and fly.toml/docker-compose declare the context explicitly.
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 RUN corepack enable
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY apps/web apps/web
 COPY packages/web-kit packages/web-kit
 RUN pnpm --filter auto-veritas-web build
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 ENV NODE_ENV=production PORT=8080 HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 WORKDIR /app

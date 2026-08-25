@@ -115,3 +115,32 @@ authservice supports all three; the product needs none of them for a
 single-owner comparison site with invited viewers. Login handles the
 `requiresTwoFactor` response with an honest message instead of a broken flow.
 All three are ranked in the UI/UX backlog, none blocks the core journey.
+
+## D-13 — Offer history is keyed by the offer's id, snapshotted on `PUT` only, viewer-readable
+
+Resolves UI/UX backlog item 3. Four choices, each rejected alternative recorded:
+
+- **Keyed by `CarOfferId`/`FinancingOfferId` (the entity's GUID), never by
+  `Slug` or name.** Both `PUT` handlers already let an agent change `Slug`
+  (with a uniqueness check); keying history by a value that can be edited
+  would strand or misattribute rows the moment that happens. The id never
+  changes across an offer's lifetime.
+- **A snapshot is written only when the pre-`PUT` and post-`PUT` value fields
+  actually differ** (compared via record equality on `CarOfferSnapshot` /
+  `FinancingOfferSnapshot`). A no-op re-send of an unchanged payload — which
+  the agent workflow does not forbid — would otherwise pollute the timeline
+  with identical rows.
+- **`POST .../verify` never writes a history row.** It is deliberately the
+  cheap, values-unchanged re-verification operation (AGENT-GUIDE.md §4); a
+  full snapshot on every re-check would drown real price/rate changes in
+  noise. A source-name/URL correction belongs in a `PUT`, not a `verify`.
+- **Read access matches the rest of the read API — any signed-in viewer, not
+  admin-only** — the point raised was "can the [end] user see this
+  accessibly", and the history endpoints (`GET .../{id}/history`) sit under
+  the same `viewerApi` group as everything else. Capped at the 100 most
+  recent entries per offer (no pagination) since real history for a single
+  offer stays short; a deeper archive was rejected as premature.
+
+Deleting an offer (`DELETE`) cascades onto its history: `DELETE` is reserved
+for entries that were wrong, and a wrong entry's history is wrong too — it
+does not survive as an orphaned row nothing can look up again.

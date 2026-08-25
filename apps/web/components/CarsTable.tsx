@@ -1,9 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { fmtEUR, freshnessRank } from '../lib/format';
-import type { CarOffer } from '../lib/types';
+import { Fragment, useMemo, useState } from 'react';
+import { fmtDate, fmtEUR, freshnessRank } from '../lib/format';
+import type { CarOffer, CarOfferHistoryEntry } from '../lib/types';
 import { DgtChip, EstimateChip, FreshnessBadge, SortableTh } from './badges';
+import { HistoryRow, HistoryToggle } from './HistoryPanel';
+
+const CAR_TABLE_COLUMNS = 10;
 
 function reliabilityClass(score: number | null): string {
   if (score == null) return 'rel-unproven';
@@ -47,6 +50,7 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
   const [maxAge, setMaxAge] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -210,40 +214,80 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((offer) => (
-                <tr key={offer.id} className={freshnessRank(offer.priceFreshness) >= 2 ? 'degraded' : undefined}>
-                  <td className="model-name">
-                    {offer.name}
-                    <span className="sub">{offer.variant}</span>
-                  </td>
-                  <td>
-                    <DgtChip label={offer.dgtLabel} />
-                  </td>
-                  <td className="num">{offer.powerCv}</td>
-                  <td className="num price-cash">
-                    {fmtEUR(offer.cashPriceEur)} <EstimateChip confidence={offer.priceConfidence} />
-                  </td>
-                  <td className="num price-fin">{fmtEUR(offer.financedPriceEur)}</td>
-                  <td className="num gap">{offer.priceGapEur != null ? `~${fmtEUR(offer.priceGapEur)}` : '—'}</td>
-                  <td className={`num ${reliabilityClass(offer.reliabilityScore)}`}>
-                    {offer.reliabilityScore != null
-                      ? `${offer.reliabilityText ?? ''} (${offer.reliabilityScore}/100)`
-                      : '—'}
-                  </td>
-                  <td className="num">{offer.bootLiters != null ? `${offer.bootLiters} L` : '—'}</td>
-                  <td>
-                    <FreshnessBadge
-                      status={offer.priceFreshness}
-                      days={offer.daysSinceVerification}
-                      lastVerifiedAt={offer.lastVerifiedAt}
-                      offerValidUntil={offer.offerValidUntil}
-                      sourcePublishedAt={offer.sourcePublishedAt}
-                      isExpired={offer.isExpired}
-                    />
-                  </td>
-                  <td className="note-cell">{offer.notes}</td>
-                </tr>
-              ))}
+              {filtered.map((offer) => {
+                const historyOpen = expandedId === offer.id;
+                return (
+                  <Fragment key={offer.id}>
+                    <tr className={freshnessRank(offer.priceFreshness) >= 2 ? 'degraded' : undefined}>
+                      <td className="model-name">
+                        {offer.name}
+                        <span className="sub">{offer.variant}</span>
+                      </td>
+                      <td>
+                        <DgtChip label={offer.dgtLabel} />
+                      </td>
+                      <td className="num">{offer.powerCv}</td>
+                      <td className="num price-cash">
+                        {fmtEUR(offer.cashPriceEur)} <EstimateChip confidence={offer.priceConfidence} />
+                      </td>
+                      <td className="num price-fin">{fmtEUR(offer.financedPriceEur)}</td>
+                      <td className="num gap">{offer.priceGapEur != null ? `~${fmtEUR(offer.priceGapEur)}` : '—'}</td>
+                      <td className={`num ${reliabilityClass(offer.reliabilityScore)}`}>
+                        {offer.reliabilityScore != null
+                          ? `${offer.reliabilityText ?? ''} (${offer.reliabilityScore}/100)`
+                          : '—'}
+                      </td>
+                      <td className="num">{offer.bootLiters != null ? `${offer.bootLiters} L` : '—'}</td>
+                      <td>
+                        <FreshnessBadge
+                          status={offer.priceFreshness}
+                          days={offer.daysSinceVerification}
+                          lastVerifiedAt={offer.lastVerifiedAt}
+                          offerValidUntil={offer.offerValidUntil}
+                          sourcePublishedAt={offer.sourcePublishedAt}
+                          isExpired={offer.isExpired}
+                        />
+                        <HistoryToggle
+                          open={historyOpen}
+                          onToggle={() => setExpandedId(historyOpen ? null : offer.id)}
+                        />
+                      </td>
+                      <td className="note-cell">{offer.notes}</td>
+                    </tr>
+                    {historyOpen && (
+                      <HistoryRow<CarOfferHistoryEntry>
+                        colSpan={CAR_TABLE_COLUMNS}
+                        fetchUrl={`/api/proxy/offers/api/v1/car-offers/${offer.id}/history`}
+                        emptyLabel="Brak wcześniejszych zmian — to pierwsza zapisana wersja."
+                        renderEntries={(entries) => (
+                          <table className="history-table">
+                            <thead>
+                              <tr>
+                                <th>Data zmiany</th>
+                                <th>Cena gotówkowa</th>
+                                <th>Cena finansowana</th>
+                                <th>Zweryfikowano</th>
+                                <th>Zmienił</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {entries.map((entry) => (
+                                <tr key={entry.id}>
+                                  <td>{fmtDate(entry.recordedAt)}</td>
+                                  <td className="num">{fmtEUR(entry.cashPriceEur)}</td>
+                                  <td className="num">{fmtEUR(entry.financedPriceEur)}</td>
+                                  <td>{fmtDate(entry.lastVerifiedAt)}</td>
+                                  <td>{entry.changedByEmail ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

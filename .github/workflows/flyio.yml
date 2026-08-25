@@ -23,7 +23,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
@@ -47,7 +47,7 @@ jobs:
       offers: ${{ steps.detect.outputs.offers }}
       web: ${{ steps.detect.outputs.web }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: superfly/flyctl-actions/setup-flyctl@master
@@ -105,7 +105,7 @@ jobs:
             app: auto-veritas-web
             dockerfile: apps/web/Dockerfile
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: needs.detect-changes.outputs[matrix.service] == 'true'
       - uses: superfly/flyctl-actions/setup-flyctl@master
         if: needs.detect-changes.outputs[matrix.service] == 'true'
@@ -132,7 +132,7 @@ jobs:
     if: always() && !cancelled() && needs.detect-changes.outputs.postgres == 'true' && needs.test.result == 'success'
     environment: flyio
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Ensure app, volume and secrets
         env:
@@ -164,7 +164,7 @@ jobs:
           && (needs.deploy-postgres.result == 'success' || needs.detect-changes.outputs.postgres != 'true') }}
     environment: flyio
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Ensure app and secrets
         env:
@@ -200,7 +200,7 @@ jobs:
           && (needs.deploy-authservice.result == 'success' || needs.detect-changes.outputs.authservice != 'true') }}
     environment: flyio
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Ensure app and secrets
         env:
@@ -228,7 +228,7 @@ jobs:
           && (needs.deploy-offers.result == 'success' || needs.detect-changes.outputs.offers != 'true') }}
     environment: flyio
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Ensure app
         env:

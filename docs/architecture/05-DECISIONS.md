@@ -144,3 +144,45 @@ Resolves UI/UX backlog item 3. Four choices, each rejected alternative recorded:
 Deleting an offer (`DELETE`) cascades onto its history: `DELETE` is reserved
 for entries that were wrong, and a wrong entry's history is wrong too — it
 does not survive as an orphaned row nothing can look up again.
+
+## D-14 — Dependabot version updates are off; dependency currency is a deliberate, batched review (2026-08-25)
+
+`.github/dependabot.yml` is deleted. The repo baseline
+([04-MIGRATION-PLAN.md](04-MIGRATION-PLAN.md) step 1) listed Dependabot as a
+standard control, so this is a deliberate divergence from that baseline,
+recorded here rather than in [DEVIATIONS.md](DEVIATIONS.md) because it is a
+choice, not an unfixed gap.
+
+**Why.** The weekly bot produced eight open PRs against a repo with one
+maintainer, and triaging them cost more than the currency was worth. Of the
+eight, three were actively harmful and two of those would have broken `main`
+had they been merged on the bot's say-so:
+
+- `node:22-alpine` → `26-alpine` broke the web image outright. Node stopped
+  distributing Corepack in v25 (`(SEMVER-MAJOR) build: stop distributing
+  Corepack`, nodejs/node#57617) and `apps/web/Dockerfile` opens with
+  `RUN corepack enable`. Node 26 is also not an LTS line.
+- `Swashbuckle.AspNetCore` 9.0.6 → 10.2.3 did not compile (`CS0234` on
+  `Microsoft.OpenApi.Models`) — it was re-proposing a pin whose comment in
+  `Directory.Packages.props` explains exactly why it is pinned.
+- `pnpm/action-setup` v4 → v6 passed CI but targets pnpm 11; this repo is on
+  pnpm 10.33.0, and v6's own README directs pnpm-10 users to stay on the
+  older line. It would have added a pnpm-11-bootstrap-then-downgrade step
+  with a known open upstream failure mode, for no capability gain.
+
+A bot that is right five times out of eight, where two of the three misses are
+build-breaking, is a review queue, not an automation.
+
+**What replaces it.** Dependency currency becomes an explicit task: check
+`dotnet list package --outdated`, `pnpm outdated`, and the pinned action/image
+versions when touching the relevant area, and bump deliberately in a batch. The
+action versions were brought current in this same pass (checkout v7,
+setup-node v7, setup-dotnet v6, gitleaks-action v3, xunit.runner.visualstudio
+4.0.0).
+
+**What this does NOT turn off.** Deleting the config stops Dependabot *version
+updates* only. Dependabot *alerts* and *security updates* are repository
+settings (Settings → Code security), not file-driven, and are deliberately left
+on — a CVE in a dependency is worth an interrupt in a way a routine minor bump
+is not. Rejected: keeping the config with `open-pull-requests-limit: 0`, which
+pauses the same way but leaves a file implying the control is active.

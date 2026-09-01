@@ -84,7 +84,7 @@ starting rather than executing on autopilot.
 |---|---|---|
 | [#27](../../issues/27) | Split freshness per data class | ⛔ **closed, not planned** — the agent verifies everything in one pass, so one date is accurate rather than simplified. Trigger recorded in `UI-UX.md`; reopen if partial passes ever start. |
 | [#28](../../issues/28) | 2FA challenge flow in the login page | ✅ **done** — contract read from authservice `v0.3.1`; challenge kept HttpOnly (D-16) |
-| [#29](../../issues/29) 🔒 | OAuth provider buttons from `/providers` | **open** — conditional on the owner configuring Google/GitHub; close as not-planned if that never happens |
+| [#29](../../issues/29) | OAuth provider buttons from `/providers` | ⛔ **closed, not planned** — the owner will not configure a provider. authservice keeps the capability; reopen if that changes. |
 | [#30](../../issues/30) | Shareable filter/sort state via the URL | ✅ **done** — URL state shipped; *named* saved filters split out |
 
 ---
@@ -109,16 +109,20 @@ in any of these is not acceptable:
 
 ## Where this stands (2026-09-01)
 
-**8 of 16 issues closed** — 7 delivered, 1 closed as not planned. Every remaining
-open issue is blocked on something only the owner can do, except **#20**:
+**9 of 16 issues closed** — 7 delivered, 2 closed as not planned (#27, #29).
+Five issues remain open:
 
-- **#16, #18, #19, #26** — need a Fly account, a SendGrid key, or a telemetry
-  vendor.
-- **#29** — needs a decision about whether OAuth is wanted at all.
-- **#20 (monthly-budget inverse search)** is the one piece of substantial
-  product work still open and *is* buildable; it was held back because its
-  design forks (server vs client, fixed vs parameterised term, and above all
-  how balloon structures rank) produce materially different products.
+- **#16, #18, #19, #26** need a Fly account, a SendGrid key, or a telemetry
+  vendor — none of them is work an agent can do.
+- **#20 (monthly-budget inverse search)** is the only substantial product work
+  still open that *is* buildable. It was held back because its design forks
+  (server vs client, fixed vs parameterised term, and above all how balloon
+  structures rank) produce materially different products, and ranking by
+  monthly cost is precisely how the balloon deception works in the wild.
+
+So the agent-executable backlog is empty except for one item awaiting a design
+decision. Phase 1 is the critical path: nothing else in the product can be
+verified against reality until #16 puts it somewhere real.
 
 The deviation register went from 8 rows to 4 over this pass.
 

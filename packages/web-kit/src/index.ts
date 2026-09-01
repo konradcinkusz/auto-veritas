@@ -11,6 +11,17 @@ export {
   handleSession,
 } from './auth-routes';
 export { handleProxy } from './proxy';
+export {
+  AUTH_POLICY,
+  PROXY_POLICY,
+  clientIp,
+  consume,
+  enforceAuthRateLimit,
+  enforceRateLimit,
+  partitionKey,
+  resetRateLimiter,
+} from './rate-limit';
+export type { RateLimitPolicy, RateLimitResult } from './rate-limit';
 export { handleConfig } from './config-route';
 export { createAuthMiddleware } from './middleware';
 export type { AuthMiddlewareOptions } from './middleware';

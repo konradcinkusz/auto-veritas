@@ -186,3 +186,38 @@ settings (Settings → Code security), not file-driven, and are deliberately lef
 on — a CVE in a dependency is worth an interrupt in a way a routine minor bump
 is not. Rejected: keeping the config with `open-pull-requests-limit: 0`, which
 pauses the same way but leaves a file implying the control is active.
+
+## D-15 — The BFF limiter partitions on a *verified* subject, and is per-instance by design (2026-09-01)
+
+Closes the SERVICE-API-PATTERNS partial-coverage deviation: authservice limited
+its auth endpoints and the OffersService limited per user, but the Next.js
+process fanning requests out to both was unprotected.
+
+**Partition key is the verified JWT subject, falling back to client IP.**
+Decoding the access cookie without checking its signature would have been
+cheaper and is the obvious implementation — and it is a bypass, not a limiter:
+anyone can mint an endless supply of partitions by varying `sub` in an unsigned
+token, and the flood still lands on the process being protected. Verification
+is a local check against the already-cached JWKS, and the request is about to
+make a network hop anyway, so the cost is noise. Anything that does not verify
+— anonymous, expired, forged — keys on the client IP, which the caller cannot
+choose.
+
+**Per-user, not per-IP, for signed-in traffic**, so users behind one NAT do not
+share a budget. Auth routes (`login`, `register`) are unauthenticated by
+definition and key on IP directly rather than paying for a verification that
+cannot succeed; `logout`, `session` and `consents` are deliberately ungated,
+since rate-limiting a user out of ending their own session is a worse outcome
+than the traffic it would prevent.
+
+**The 429 body matches the kernel's exactly** (`{ error, retryAfter }` plus a
+`Retry-After` header, per `RateLimitingExtensions`), so a client sees one
+contract whether it was limited at the edge or at the service.
+
+**Counters are in-process and this is a stated limit, not an oversight.** Two
+Fly machines mean two independent budgets and a restart forgets everything. It
+defends what the deviation described — one client hammering one process — and
+does nothing against a distributed flood, which belongs at the edge/CDN.
+Rejected: a shared store (Redis) for a correct global quota, which adds a
+stateful dependency to a stack that currently has exactly one, for a threat
+this product does not yet face.

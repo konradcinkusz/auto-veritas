@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as authservice from './authservice';
 import { candidates } from './backends';
 import { ACCESS_COOKIE, REFRESH_COOKIE, setAuthCookies, type TokenPair } from './cookies';
+import { PROXY_POLICY, enforceRateLimit } from './rate-limit';
 import { isExpired } from './session';
 
 /**
@@ -51,6 +52,13 @@ export async function handleProxy(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
+  // Before any upstream work: a flood must cost this process one map lookup,
+  // not a token refresh and a fan-out to the candidate ladder.
+  const limited = await enforceRateLimit(request, PROXY_POLICY);
+  if (limited) {
+    return limited;
+  }
+
   const { path } = await params;
   const route = resolveRoute(path);
   if (!route) {

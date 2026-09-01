@@ -7,7 +7,7 @@ working language for this product); code and docs are English.
 
 | Route | Access | What it is |
 |---|---|---|
-| `/login` | public | Dark-theme card: e-mail + password, generic error messages (never revealing whether the account exists), lockout / unverified-e-mail / rate-limit messages mapped from authservice's response shapes, honest "not supported yet" message for 2FA-enabled accounts. Preserves `?redirect=`. |
+| `/login` | public | Dark-theme card: e-mail + password, generic error messages (never revealing whether the account exists), lockout / unverified-e-mail / rate-limit messages mapped from authservice's response shapes, a second step for 2FA-enabled accounts (authenticator code, or a recovery code when the device is gone). Preserves `?redirect=`. |
 | `/register` | public | E-mail + password (policy hinted in the error path), consent checkbox rendering the **live** consent versions fetched from authservice (never hardcoded), handles both the 200-with-tokens and 202-verify-first response shapes. |
 | `/` | signed-in | The product: header with user e-mail + logout, badge row (counts, region, newest verification date), and two comparison tables. |
 | `/healthz` | public | Platform health only. |
@@ -70,8 +70,10 @@ became server-enforced domain rules rather than table copy.
    response, so it costs no extra request. The link is render-only
    (`rel="noopener noreferrer nofollow"`, never fetched server-side), keeping
    the security review's A10/SSRF proof valid.
-4. **2FA challenge flow** in the login page (authservice already supports it).
-   [D-12]
+4. ~~**2FA challenge flow** in the login page~~ — **built**: a 2FA-enabled
+   account now gets a code step instead of a dead end, with a recovery-code
+   fallback. The challenge token stays in an HttpOnly cookie and never reaches
+   page scripts (D-16). [D-12]
 5. **Per-column freshness** — a price verified yesterday but a spec from a year
    ago currently share one row badge; split when the agent starts partial
    verifications. [freshness model fidelity]

@@ -48,6 +48,19 @@ export function login(email: string, password: string): Promise<AuthserviceResul
   return post('/api/v1/auth/login', { email, password });
 }
 
+/**
+ * Completes a login that stopped at the challenge. Exactly one of `code` or
+ * `recoveryCode` is sent: authservice checks `code` first and only falls
+ * through to `recoveryCode` when it is absent, so sending both would silently
+ * burn a single-use recovery code on a request the authenticator could serve.
+ */
+export function twoFactorLogin(
+  challengeToken: string,
+  secondFactor: { code: string } | { recoveryCode: string },
+): Promise<AuthserviceResult> {
+  return post('/api/v1/auth/2fa/login', { challengeToken, ...secondFactor });
+}
+
 export function register(payload: {
   email: string;
   password: string;

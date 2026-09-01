@@ -1,4 +1,12 @@
-export { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from './cookies';
+export {
+  ACCESS_COOKIE,
+  CHALLENGE_COOKIE,
+  REFRESH_COOKIE,
+  clearAuthCookies,
+  clearChallengeCookie,
+  setAuthCookies,
+  setChallengeCookie,
+} from './cookies';
 export type { TokenPair } from './cookies';
 export { authBaseUrl, candidates } from './backends';
 export { isExpired, verifyAccessToken } from './session';
@@ -9,6 +17,7 @@ export {
   handleLogout,
   handleRegister,
   handleSession,
+  handleTwoFactorLogin,
 } from './auth-routes';
 export { handleProxy } from './proxy';
 export {

@@ -22,6 +22,27 @@ covered at a cheaper tier.
    ("you can see when and to what a value changed") actually renders, not just
    the endpoint answering 200.
 
+## Core-regression flows (core, alongside smoke, single browser)
+
+Dashboard behaviour that is not smoke-critical but expensive to break. These
+run against one shared stored session, so they are about the dashboard rather
+than about logging in.
+
+1. The search box narrows the car table, and clearing it restores the original
+   count — including the explicit "no matches" state rather than a silently
+   empty table.
+2. The DGT filter leaves *only* matching rows — asserted across every remaining
+   row, since a filter that leaks one wrong row is precisely the bug this tier
+   exists to catch.
+3. A stale offer that is **cheaper** still sorts below a fresh dearer one.
+   Default ordering is freshness first, price second; this is degrade-don't-hide
+   expressed as an assertion rather than a comment.
+4. An offer that has never been edited reports an empty history in words, not a
+   blank table or a spinner that never resolves — "history is broken" and
+   "nothing has changed yet" must not look the same.
+5. An offer with no recorded source says so in its details panel. Claiming
+   verification while pointing at nothing is the failure that panel closes.
+
 ## Non-goals
 
 - No single-field validation through a browser (unit tier owns it).
@@ -37,10 +58,15 @@ covered at a cheaper tier.
   CSS chains.
 - Waiting: web-first auto-retrying assertions only; fixed sleeps are banned and
   grepped for in CI.
-- Auth: at the current suite size every test registers its own fresh account —
-  registration is itself part of the protected surface, and six tests do not
-  amortize a `storageState` setup. The stored-context pattern becomes mandatory
-  when the core-regression tier lands and login stops being what most tests are
-  about.
+- Auth: **smoke** registers a fresh account per test on purpose — registration
+  is itself part of the surface it protects, and its first flow is the anonymous
+  redirect, which a pre-seeded session would defeat. **core** uses one shared
+  `storageState` seeded by `tests/auth.setup.ts`, as this charter required once
+  the core tier landed: those tests are about the dashboard, and paying for a
+  registration round-trip in each buys nothing but a slower suite and more ways
+  to fail.
+- Tiers are Playwright **projects**, not just tags, because they need different
+  session handling. Each project matches exactly one spec file, so no test is
+  collected twice under two different session assumptions.
 - Data: generated per-test accounts (`e2e-<uuid>@example.test`); the stack the
   suite runs against is ephemeral (compose-per-run), so cleanup is mechanical.

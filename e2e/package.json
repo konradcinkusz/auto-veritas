@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:smoke": "playwright test --grep @smoke"
+    "test:smoke": "playwright test --project=smoke",
+    "test:core": "playwright test --project=core"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

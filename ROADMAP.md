@@ -38,24 +38,24 @@ listed first, but the agent-executable path starts at Phase 2.
 Goal: the product exists on the public internet. Build-plan steps 7–8.
 **Every issue here is owner-gated.**
 
-| Issue | Title | Blocked on |
+| Issue | Title | Status |
 |---|---|---|
-| [#16](../../issues/16) 🔒 | Execute the first live Fly.io deploy | Fly account + org token |
-| [#17](../../issues/17) 🔒 | Enable GitHub code scanning so CodeQL stops failing | Repo settings toggle |
-| [#18](../../issues/18) 🔒 | Turn on e-mail verification before opening registration | SendGrid key · depends on #16 |
-| [#19](../../issues/19) 🔒 | Grant the agent account Admin, run first production verification | depends on #16 |
+| [#16](../../issues/16) 🔒 | Execute the first live Fly.io deploy | **open** — needs Fly account + org token |
+| [#17](../../issues/17) | Enable GitHub code scanning so CodeQL stops failing | ✅ **done** — owner enabled it; CodeQL is green |
+| [#18](../../issues/18) 🔒 | Turn on e-mail verification before opening registration | **open** — needs SendGrid key · depends on #16 |
+| [#19](../../issues/19) 🔒 | Grant the agent account Admin, run first production verification | **open** — depends on #16 |
 
-Only #16 truly blocks the rest; #17 is independent and takes about a minute.
+#16 blocks the rest of this phase and nothing else can proceed without it.
 
 ## Phase 2 — Product core (target: 2026-10-12)
 
 Goal: deliver the two backlog items that carry the product's actual value.
 First fully agent-executable phase.
 
-| Issue | Title | Notes |
+| Issue | Title | Status |
 |---|---|---|
-| [#20](../../issues/20) | Monthly-budget inverse search | Largest item; may split into engine → API → UI |
-| [#21](../../issues/21) | Offer detail view exposing source links | Finishes the half of backlog item 3 that D-13 left open |
+| [#20](../../issues/20) | Monthly-budget inverse search | **open** — largest remaining item; see the must-not-regress note below |
+| [#21](../../issues/21) | Offer detail view exposing source links | ✅ **done** — expandable panel, zero extra requests, SSRF proof intact |
 
 **Must not regress:** #20 ranks by monthly cost. Any ranking that surfaces a low
 installment without its total cost and balloon marking recreates the exact
@@ -66,26 +66,26 @@ cosmetic.
 
 Goal: drain the deviation register. Mostly small, independent, well-specified.
 
-| Issue | Title | Notes |
+| Issue | Title | Status |
 |---|---|---|
-| [#22](../../issues/22) | Pin `superfly/flyctl-actions` to a SHA instead of `@master` | Only moving ref left; no bot watches it since D-14 |
-| [#23](../../issues/23) | Rate-limit the web BFF routes | Limiter must sit *after* auth, or it partitions per-IP |
-| [#24](../../issues/24) | Add gitleaks as a committed pre-commit hook | |
-| [#26](../../issues/26) | Configure an OTLP collector | Partly owner-gated (vendor choice) · depends on #16 |
-| [#31](../../issues/31) | Add the e2e core-regression tier | Sequenced *after* #20 or #21 per DEVIATIONS |
-| [#25](../../issues/25) | Add a manual flyio-scale workflow | Must structurally exclude postgres |
+| [#22](../../issues/22) | Pin `superfly/flyctl-actions` to a SHA instead of `@master` | ✅ **done** — all 7 sites; no moving refs remain |
+| [#23](../../issues/23) | Rate-limit the web BFF routes | ✅ **done** — partitions on a *verified* subject (D-15) |
+| [#24](../../issues/24) | Add gitleaks as a committed pre-commit hook | ✅ **done** — verified it actually blocks a staged credential |
+| [#26](../../issues/26) 🔒 | Configure an OTLP collector | **open** — needs a vendor choice · depends on #16 |
+| [#31](../../issues/31) | Add the e2e core-regression tier | ✅ **done** — 5 flows, shared `storageState`, own CI job |
+| [#25](../../issues/25) | Add a manual flyio-scale workflow | ✅ **done** — postgres excluded structurally *and* at runtime |
 
 ## Phase 4 — Auth & convenience (target: 2026-12-07)
 
 Goal: the remaining ranked backlog. Lowest value density — reassess before
 starting rather than executing on autopilot.
 
-| Issue | Title | Notes |
+| Issue | Title | Status |
 |---|---|---|
-| [#27](../../issues/27) | Split freshness per data class | **Confirm the agent verifies partially first** — otherwise premature |
-| [#28](../../issues/28) | 2FA challenge flow in the login page | Verify the contract against deployed authservice v0.3.1 |
-| [#29](../../issues/29) | OAuth provider buttons from `/providers` | Close as not-planned if no provider is ever configured |
-| [#30](../../issues/30) | Shareable filter/sort state via the URL | Ship URL state; decide on named saves separately |
+| [#27](../../issues/27) | Split freshness per data class | ⛔ **closed, not planned** — the agent verifies everything in one pass, so one date is accurate rather than simplified. Trigger recorded in `UI-UX.md`; reopen if partial passes ever start. |
+| [#28](../../issues/28) | 2FA challenge flow in the login page | ✅ **done** — contract read from authservice `v0.3.1`; challenge kept HttpOnly (D-16) |
+| [#29](../../issues/29) 🔒 | OAuth provider buttons from `/providers` | **open** — conditional on the owner configuring Google/GitHub; close as not-planned if that never happens |
+| [#30](../../issues/30) | Shareable filter/sort state via the URL | ✅ **done** — URL state shipped; *named* saved filters split out |
 
 ---
 
@@ -106,6 +106,21 @@ in any of these is not acceptable:
   `.gitleaks.toml` and the CI job stay.
 - **The migrations path.** Committed EF migrations, never `EnsureCreated` for
   the offers database.
+
+## Where this stands (2026-09-01)
+
+**8 of 16 issues closed** — 7 delivered, 1 closed as not planned. Every remaining
+open issue is blocked on something only the owner can do, except **#20**:
+
+- **#16, #18, #19, #26** — need a Fly account, a SendGrid key, or a telemetry
+  vendor.
+- **#29** — needs a decision about whether OAuth is wanted at all.
+- **#20 (monthly-budget inverse search)** is the one piece of substantial
+  product work still open and *is* buildable; it was held back because its
+  design forks (server vs client, fixed vs parameterised term, and above all
+  how balloon structures rank) produce materially different products.
+
+The deviation register went from 8 rows to 4 over this pass.
 
 ## Velocity assumption
 

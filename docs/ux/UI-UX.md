@@ -74,9 +74,17 @@ became server-enforced domain rules rather than table copy.
    account now gets a code step instead of a dead end, with a recovery-code
    fallback. The challenge token stays in an HttpOnly cookie and never reaches
    page scripts (D-16). [D-12]
-5. **Per-column freshness** — a price verified yesterday but a spec from a year
-   ago currently share one row badge; split when the agent starts partial
-   verifications. [freshness model fidelity]
+5. **Per-column freshness** — ~~a price verified yesterday but a spec from a
+   year ago currently share one row badge~~ — **deliberately not built**
+   (2026-09-01). The owner confirmed the agent always verifies everything in a
+   single pass, so one `lastVerifiedAt` per offer is an accurate
+   representation, not a simplification: splitting it would produce three
+   fields that are always equal, at the cost of a migration, a changed
+   `POST .../verify` contract, and a new way for the three to drift in the data
+   without drifting in reality. **The trigger is unchanged** — if the agent
+   ever moves to partial passes (prices weekly, specs annually), one shared
+   date starts lying and this becomes worth building that day.
+   [freshness model fidelity]
 6. **OAuth provider buttons** rendered from authservice's `/providers` discovery
    (only if the owner configures Google/GitHub). [D-12]
 7. ~~**Saved filters / shareable views** for comparing shortlists~~ —

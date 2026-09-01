@@ -1,0 +1,91 @@
+# Manual scaling for the stateless apps.
+#
+# auto-veritas-postgres is deliberately absent from the `app` choice list and is
+# rejected again at runtime. It is the one stateful, volume-backed app in the
+# topology: scaling it the way a stateless app is scaled is a data-loss-shaped
+# mistake, and this workflow is the sort of thing someone reaches for at 2am
+# during an incident. The exclusion is structural rather than a warning in a
+# description, because a warning is exactly what gets skipped at 2am.
+name: Scale Fly.io apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to scale (postgres is intentionally not offered)'
+        type: choice
+        required: true
+        options:
+          - auto-veritas-web
+          - auto-veritas-offers
+          - auto-veritas-authservice
+      count:
+        description: 'Number of machines to run'
+        type: string
+        required: true
+        default: '1'
+      vm_size:
+        description: 'VM preset — leave as "unchanged" to scale count only'
+        type: choice
+        required: true
+        default: unchanged
+        options:
+          - unchanged
+          - shared-cpu-1x
+          - shared-cpu-2x
+          - shared-cpu-4x
+          - performance-1x
+          - performance-2x
+
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+    environment: flyio
+    steps:
+      - name: Refuse anything stateful
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          # Second line of defence. The choice list above cannot currently
+          # produce this, but a later edit adding an option must not silently
+          # gain the ability to scale a volume-backed app.
+          case "$APP" in
+            *postgres*)
+              echo "::error::$APP is stateful and volume-backed; scale it deliberately by hand, not from this workflow."
+              exit 1
+              ;;
+          esac
+
+      - name: Validate the machine count
+        env:
+          COUNT: ${{ inputs.count }}
+        run: |
+          # A non-numeric or empty value would otherwise reach flyctl and be
+          # interpreted in ways nobody intends. 0 is allowed: scaling to zero is
+          # a legitimate way to park an app without destroying it.
+          if ! printf '%s' "$COUNT" | grep -Eq '^[0-9]+$'; then
+            echo "::error::count must be a non-negative integer, got '$COUNT'."
+            exit 1
+          fi
+          if [ "$COUNT" -gt 10 ]; then
+            echo "::error::count $COUNT exceeds the sane ceiling for this project; raise it deliberately in the workflow if that is really wanted."
+            exit 1
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1  # v1.6
+
+      - name: Scale VM size
+        if: inputs.vm_size != 'unchanged'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl scale vm "${{ inputs.vm_size }}" --app "${{ inputs.app }}" --yes
+
+      - name: Scale machine count
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl scale count "${{ inputs.count }}" --app "${{ inputs.app }}" --yes
+
+      - name: Show the resulting state
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl status --app "${{ inputs.app }}"

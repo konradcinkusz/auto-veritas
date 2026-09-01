@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as authservice from './authservice';
 import { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from './cookies';
 import { isExpired, verifyAccessToken } from './session';
+import { enforceAuthRateLimit } from './rate-limit';
 
 /**
  * The BFF auth routes. Tokens live only in HttpOnly cookies set here; client
@@ -10,6 +11,9 @@ import { isExpired, verifyAccessToken } from './session';
  */
 
 export async function handleLogin(request: NextRequest): Promise<NextResponse> {
+  const limited = enforceAuthRateLimit(request);
+  if (limited) return limited;
+
   const payload = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
   if (!payload?.email || !payload.password) {
     return NextResponse.json({ error: 'E-mail i hasło są wymagane.' }, { status: 400 });
@@ -28,6 +32,9 @@ export async function handleLogin(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function handleRegister(request: NextRequest): Promise<NextResponse> {
+  const limited = enforceAuthRateLimit(request);
+  if (limited) return limited;
+
   const payload = (await request.json().catch(() => null)) as {
     email?: string;
     password?: string;

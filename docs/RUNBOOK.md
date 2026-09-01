@@ -197,6 +197,28 @@ These are assembled by the workflow from the four root secrets and staged with
 `auto-veritas-web` holds **no** secrets: sessions are HttpOnly cookies carrying
 authservice's tokens, verified against its JWKS.
 
+### Bumping the pinned action versions
+
+Every third-party action is pinned — `superfly/flyctl-actions/setup-flyctl` to
+a commit SHA, the rest to a major tag. Dependabot version updates are off
+(D-14), so **nothing will propose these bumps for you**. Check them when you
+touch CI, and resolve a SHA deliberately:
+
+```bash
+git ls-remote --tags https://github.com/superfly/flyctl-actions
+```
+
+Pin the SHA the intended tag points at and record which tag it was in the
+trailing comment, so the next reader can tell what they are actually on:
+
+```yaml
+- uses: superfly/flyctl-actions/setup-flyctl@<40-char-sha>  # v1.6
+```
+
+A moving ref (`@master`, `@main`) in a workflow that holds `FLY_API_TOKEN` means
+every deploy runs whatever is on that branch at that moment — don't reintroduce
+one.
+
 ---
 
 ## Gotchas that have actually bitten this repo

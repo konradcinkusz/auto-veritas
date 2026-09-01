@@ -85,8 +85,17 @@ became server-enforced domain rules rather than table copy.
    ever moves to partial passes (prices weekly, specs annually), one shared
    date starts lying and this becomes worth building that day.
    [freshness model fidelity]
-6. **OAuth provider buttons** rendered from authservice's `/providers` discovery
-   (only if the owner configures Google/GitHub). [D-12]
+6. **OAuth provider buttons** — ~~rendered from authservice's `/providers`
+   discovery~~ — **closed, not planned** (2026-09-01). The item was always
+   conditional on the owner configuring Google/GitHub; the owner has confirmed
+   they will not. Building it defensively would have been harmless to look at
+   (with nothing configured, discovery returns nothing and no buttons render)
+   but would have cost a discovery request on every login-page render, forever,
+   to decide not to draw anything. **authservice remains fully capable** —
+   `/api/v1/external-auth/{login,callback,providers}` plus `exchange` exist at
+   `v0.3.1`, and the callback hands back a single-use exchange code rather than
+   putting tokens in a URL — so if a provider is ever configured this is a
+   fresh, small piece of work against an API that already exists. [D-12]
 7. ~~**Saved filters / shareable views** for comparing shortlists~~ —
    **half built**: filter and sort state now round-trips through the query
    string, so a view survives a refresh and can be pasted to another signed-in

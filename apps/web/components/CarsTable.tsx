@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { fmtDate, fmtEUR, freshnessRank } from '../lib/format';
+import { useUrlState } from '../lib/url-state';
 import type { CarOffer, CarOfferHistoryEntry } from '../lib/types';
 import { DgtChip, EstimateChip, FreshnessBadge, SortableTh } from './badges';
 import { DetailsRow, DetailsToggle } from './DetailsPanel';
@@ -45,12 +46,22 @@ function sortValue(offer: CarOffer, key: SortKey): string | number | null {
 }
 
 export default function CarsTable({ offers }: { offers: CarOffer[] }) {
-  const [search, setSearch] = useState('');
-  const [label, setLabel] = useState('all');
-  const [maxPrice, setMaxPrice] = useState(PRICE_MAX);
-  const [maxAge, setMaxAge] = useState('all');
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  // Filter/sort state lives in the query string so a view survives a refresh
+  // and can be pasted to someone else. Values are strings there and parsed here.
+  const [url, setUrl, resetUrl] = useUrlState('', {
+    q: '',
+    dgt: 'all',
+    price: String(PRICE_MAX),
+    age: 'all',
+    sort: '',
+    dir: '1',
+  });
+  const search = url.q;
+  const label = url.dgt;
+  const maxPrice = Number(url.price) || PRICE_MAX;
+  const maxAge = url.age;
+  const sortKey = (url.sort || null) as SortKey | null;
+  const sortDir: 1 | -1 = url.dir === '-1' ? -1 : 1;
   // One panel open at a time across the whole table: two stacked expansions
   // under one row push the comparison apart for no benefit.
   const [expanded, setExpanded] = useState<{ id: string; panel: 'history' | 'details' } | null>(null);
@@ -106,22 +117,15 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
   }, [offers, search, label, maxPrice, maxAge, sortKey, sortDir]);
 
   function onSort(key: string) {
-    const typed = key as SortKey;
-    if (sortKey === typed) {
-      setSortDir(sortDir === 1 ? -1 : 1);
+    if (sortKey === key) {
+      setUrl({ dir: sortDir === 1 ? '-1' : '1' });
     } else {
-      setSortKey(typed);
-      setSortDir(1);
+      setUrl({ sort: key, dir: '1' });
     }
   }
 
   function reset() {
-    setSearch('');
-    setLabel('all');
-    setMaxPrice(PRICE_MAX);
-    setMaxAge('all');
-    setSortKey(null);
-    setSortDir(1);
+    resetUrl();
   }
 
   return (
@@ -139,12 +143,12 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
             type="search"
             placeholder="np. BYD, Toyota, HEV..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => setUrl({ q: event.target.value })}
           />
         </div>
         <div className="control-group">
           <label htmlFor="labelFilter">Etykieta DGT</label>
-          <select id="labelFilter" value={label} onChange={(event) => setLabel(event.target.value)}>
+          <select id="labelFilter" value={label} onChange={(event) => setUrl({ dgt: event.target.value })}>
             <option value="all">Wszystkie</option>
             <option value="Cero">0 / CERO</option>
             <option value="Eco">ECO</option>
@@ -152,7 +156,7 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
         </div>
         <div className="control-group">
           <label htmlFor="carFreshness">Świeżość danych</label>
-          <select id="carFreshness" value={maxAge} onChange={(event) => setMaxAge(event.target.value)}>
+          <select id="carFreshness" value={maxAge} onChange={(event) => setUrl({ age: event.target.value })}>
             <option value="all">Wszystkie</option>
             <option value="7">Zweryfikowane ≤ 7 dni</option>
             <option value="14">Zweryfikowane ≤ 14 dni</option>
@@ -174,7 +178,7 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
               max={PRICE_MAX}
               step={500}
               value={maxPrice}
-              onChange={(event) => setMaxPrice(Number(event.target.value))}
+              onChange={(event) => setUrl({ price: event.target.value })}
             />
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { fmtDate, fmtEUR, fmtPct, freshnessRank } from '../lib/format';
+import { useUrlState } from '../lib/url-state';
 import type { FinancingOffer, FinancingOfferHistoryEntry } from '../lib/types';
 import { EstimateChip, FreshnessBadge, SortableTh, StructureChip } from './badges';
 import { DetailsRow, DetailsToggle } from './DetailsPanel';
@@ -40,12 +41,22 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState('all');
-  const [maxTin, setMaxTin] = useState(TIN_MAX);
-  const [maxAge, setMaxAge] = useState('all');
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  // Prefixed so the two tables' filters coexist in one query string without
+  // one silently overwriting the other.
+  const [url, setUrl, resetUrl] = useUrlState('f_', {
+    q: '',
+    type: 'all',
+    tin: String(TIN_MAX),
+    age: 'all',
+    sort: '',
+    dir: '1',
+  });
+  const search = url.q;
+  const type = url.type;
+  const maxTin = Number(url.tin) || TIN_MAX;
+  const maxAge = url.age;
+  const sortKey = (url.sort || null) as SortKey | null;
+  const sortDir: 1 | -1 = url.dir === '-1' ? -1 : 1;
   // One panel open at a time across the whole table: two stacked expansions
   // under one row push the comparison apart for no benefit.
   const [expanded, setExpanded] = useState<{ id: string; panel: 'history' | 'details' } | null>(null);
@@ -85,22 +96,15 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
   }, [offers, search, type, maxTin, maxAge, sortKey, sortDir]);
 
   function onSort(key: string) {
-    const typed = key as SortKey;
-    if (sortKey === typed) {
-      setSortDir(sortDir === 1 ? -1 : 1);
+    if (sortKey === key) {
+      setUrl({ dir: sortDir === 1 ? '-1' : '1' });
     } else {
-      setSortKey(typed);
-      setSortDir(1);
+      setUrl({ sort: key, dir: '1' });
     }
   }
 
   function reset() {
-    setSearch('');
-    setType('all');
-    setMaxTin(TIN_MAX);
-    setMaxAge('all');
-    setSortKey(null);
-    setSortDir(1);
+    resetUrl();
   }
 
   return (
@@ -119,12 +123,12 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
             type="search"
             placeholder="np. Bankinter, Tesla, subskrypcja..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => setUrl({ q: event.target.value })}
           />
         </div>
         <div className="control-group">
           <label htmlFor="typeFilter">Typ finansowania</label>
-          <select id="typeFilter" value={type} onChange={(event) => setType(event.target.value)}>
+          <select id="typeFilter" value={type} onChange={(event) => setUrl({ type: event.target.value })}>
             <option value="all">Wszystkie</option>
             <option value="Bank">Kredyt bankowy</option>
             <option value="Green">Kredyt &quot;zielony&quot; (ECO/EV)</option>
@@ -135,7 +139,7 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
         </div>
         <div className="control-group">
           <label htmlFor="creditFreshness">Świeżość danych</label>
-          <select id="creditFreshness" value={maxAge} onChange={(event) => setMaxAge(event.target.value)}>
+          <select id="creditFreshness" value={maxAge} onChange={(event) => setUrl({ age: event.target.value })}>
             <option value="all">Wszystkie</option>
             <option value="14">Zweryfikowane ≤ 14 dni</option>
             <option value="45">Zweryfikowane ≤ 45 dni</option>
@@ -156,7 +160,7 @@ export default function CreditsTable({ offers }: { offers: FinancingOffer[] }) {
               max={TIN_MAX}
               step={0.1}
               value={maxTin}
-              onChange={(event) => setMaxTin(Number(event.target.value))}
+              onChange={(event) => setUrl({ tin: event.target.value })}
             />
           </div>
         </div>

@@ -174,3 +174,27 @@ test('an offer with no recorded source says so in its details panel @core', asyn
   // exists to close, so the absence has to be stated, not left blank.
   await expect(page.getByText('brak zapisanego źródła')).toBeVisible();
 });
+
+test('filter state round-trips through the URL @core', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('Szukaj modelu / marki').fill('BYD');
+  await page.getByLabel('Etykieta DGT').selectOption('Cero');
+
+  // The address bar is written without navigating, so wait for it rather than
+  // assuming it is synchronous with the keystroke.
+  await expect(page).toHaveURL(/[?&]q=BYD/);
+  await expect(page).toHaveURL(/[?&]dgt=Cero/);
+  const shared = page.url();
+
+  // What a second person opening the pasted link actually gets: the controls
+  // restored, not just the query string present.
+  await page.goto(shared);
+  await expect(page.getByLabel('Szukaj modelu / marki')).toHaveValue('BYD');
+  await expect(page.getByLabel('Etykieta DGT')).toHaveValue('Cero');
+
+  // Defaults are dropped rather than written, so a reset link is clean.
+  await page.getByRole('button', { name: /Wyczyść filtry/ }).first().click();
+  await expect(page).not.toHaveURL(/[?&]q=/);
+  await expect(page).not.toHaveURL(/[?&]dgt=/);
+});

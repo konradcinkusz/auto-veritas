@@ -62,11 +62,14 @@ became server-enforced domain rules rather than table copy.
    analysis conversation. Needs a rate-scenario engine over the financing table.
    [product core value]
 3. ~~**Offer detail view** with source links and verification history~~ —
-   **built**: `GET /api/v1/{car,financing}-offers/{id}/history` plus a
-   "Historia" toggle per row expanding a compact table of every prior value
-   (date changed, old price/rate, who changed it). See [D-13]. Still open: a
-   dedicated detail view with source links is not built — today the history
-   panel is the only per-offer drill-down.
+   **built, both halves**. History: `GET /api/v1/{car,financing}-offers/{id}/history`
+   plus a "Historia" toggle per row expanding a compact table of every prior
+   value (date changed, old price/rate, who changed it), see [D-13]. Sources:
+   a "Szczegóły" toggle per row expanding the three trust dates, the
+   confidence marker and the source as a link — rendered from the list
+   response, so it costs no extra request. The link is render-only
+   (`rel="noopener noreferrer nofollow"`, never fetched server-side), keeping
+   the security review's A10/SSRF proof valid.
 4. **2FA challenge flow** in the login page (authservice already supports it).
    [D-12]
 5. **Per-column freshness** — a price verified yesterday but a spec from a year

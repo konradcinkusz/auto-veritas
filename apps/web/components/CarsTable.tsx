@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { fmtDate, fmtEUR, freshnessRank } from '../lib/format';
 import type { CarOffer, CarOfferHistoryEntry } from '../lib/types';
 import { DgtChip, EstimateChip, FreshnessBadge, SortableTh } from './badges';
+import { DetailsRow, DetailsToggle } from './DetailsPanel';
 import { HistoryRow, HistoryToggle } from './HistoryPanel';
 
 const CAR_TABLE_COLUMNS = 10;
@@ -50,7 +51,9 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
   const [maxAge, setMaxAge] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // One panel open at a time across the whole table: two stacked expansions
+  // under one row push the comparison apart for no benefit.
+  const [expanded, setExpanded] = useState<{ id: string; panel: 'history' | 'details' } | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -215,7 +218,8 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
             </thead>
             <tbody>
               {filtered.map((offer) => {
-                const historyOpen = expandedId === offer.id;
+                const historyOpen = expanded?.id === offer.id && expanded.panel === 'history';
+                const detailsOpen = expanded?.id === offer.id && expanded.panel === 'details';
                 return (
                   <Fragment key={offer.id}>
                     <tr className={freshnessRank(offer.priceFreshness) >= 2 ? 'degraded' : undefined}>
@@ -247,13 +251,38 @@ export default function CarsTable({ offers }: { offers: CarOffer[] }) {
                           sourcePublishedAt={offer.sourcePublishedAt}
                           isExpired={offer.isExpired}
                         />
+                        <DetailsToggle
+                          open={detailsOpen}
+                          onToggle={() => setExpanded(detailsOpen ? null : { id: offer.id, panel: 'details' })}
+                        />
                         <HistoryToggle
                           open={historyOpen}
-                          onToggle={() => setExpandedId(historyOpen ? null : offer.id)}
+                          onToggle={() => setExpanded(historyOpen ? null : { id: offer.id, panel: 'history' })}
                         />
                       </td>
                       <td className="note-cell">{offer.notes}</td>
                     </tr>
+                    {detailsOpen && (
+                      <DetailsRow
+                        colSpan={CAR_TABLE_COLUMNS}
+                        sourceName={offer.sourceName}
+                        sourceUrl={offer.sourceUrl}
+                        fields={[
+                          {
+                            label: 'Cena gotówkowa',
+                            value: (
+                              <>
+                                {fmtEUR(offer.cashPriceEur)} <EstimateChip confidence={offer.priceConfidence} />
+                              </>
+                            ),
+                          },
+                          { label: 'Cena finansowana', value: fmtEUR(offer.financedPriceEur) },
+                          { label: 'Zweryfikowano', value: fmtDate(offer.lastVerifiedAt) },
+                          { label: 'Oferta ważna do', value: fmtDate(offer.offerValidUntil) },
+                          { label: 'Źródło opublikowane', value: fmtDate(offer.sourcePublishedAt) },
+                        ]}
+                      />
+                    )}
                     {historyOpen && (
                       <HistoryRow<CarOfferHistoryEntry>
                         colSpan={CAR_TABLE_COLUMNS}

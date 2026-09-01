@@ -153,3 +153,42 @@ test('logout ends the session @smoke', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/login/);
 });
+
+test("the details panel links out to the offer's source @smoke", async ({ page, request }) => {
+  const login = await request.post(`${AUTH_URL}/api/v1/auth/login`, {
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
+  const { accessToken } = (await login.json()) as { accessToken: string };
+
+  const slug = `e2e-source-offer-${randomUUID().slice(0, 8)}`;
+  const offerName = `E2E Source Cupra Born ${slug.slice(-4)}`;
+  const sourceUrl = 'https://www.cupraofficial.es/modelos/born';
+  const created = await request.post(`${OFFERS_URL}/api/v1/car-offers`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      slug,
+      name: offerName,
+      variant: 'Kompakt / BEV',
+      dgtLabel: 'Cero',
+      powerCv: 231,
+      cashPriceEur: 35400,
+      priceConfidence: 'Confirmed',
+      sourceName: 'cupraofficial.es',
+      sourceUrl,
+      lastVerifiedAt: new Date().toISOString(),
+    },
+  });
+  expect(created.status()).toBe(201);
+
+  await registerFreshUser(page);
+  const row = page.locator('tbody tr', { hasText: offerName });
+  await row.getByRole('button', { name: 'Szczegóły' }).click();
+
+  // The point of the panel: the viewer can reach the page the price was read
+  // from. Asserting the href — not just the text — is what makes this a test
+  // of the evidence link rather than of a label.
+  const link = page.getByRole('link', { name: /cupraofficial\.es/ });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', sourceUrl);
+  await expect(link).toHaveAttribute('rel', /noopener/);
+});

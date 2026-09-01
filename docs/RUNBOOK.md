@@ -228,10 +228,6 @@ immediately signs every user out.
 on every entry, check the clock skew between wherever the timestamps were
 generated and the server.
 
-**CodeQL is red on every commit** and is not your change. Code scanning is not
-enabled in the repository settings; the analysis itself runs clean and fails
-only at the SARIF upload. Tracked in `docs/architecture/DEVIATIONS.md`.
-
 ---
 
 ## Where else to look

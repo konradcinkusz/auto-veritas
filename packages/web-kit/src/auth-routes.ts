@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as authservice from './authservice';
-import { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from './cookies';
+import {
+  ACCESS_COOKIE,
+  CHALLENGE_COOKIE,
+  REFRESH_COOKIE,
+  clearAuthCookies,
+  clearChallengeCookie,
+  setAuthCookies,
+  setChallengeCookie,
+} from './cookies';
 import { isExpired, verifyAccessToken } from './session';
 import { enforceAuthRateLimit } from './rate-limit';
 
@@ -26,9 +34,71 @@ export async function handleLogin(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
-  // Pass through the shape authservice answered with (2FA challenge, lockout,
+  // A 2FA-enabled account gets a challenge at this same 200 instead of tokens.
+  // The challenge completes an authentication, so it is stored the way every
+  // other such artifact here is — HttpOnly — and the page is told only THAT a
+  // second factor is needed, never the token itself.
+  const body = result.body as { requiresTwoFactor?: boolean; challengeToken?: string } | null;
+  if (result.status === 200 && body?.requiresTwoFactor && typeof body.challengeToken === 'string') {
+    const challenge = NextResponse.json({ requiresTwoFactor: true });
+    setChallengeCookie(challenge, body.challengeToken);
+    return challenge;
+  }
+
+  // Everything else passes through as authservice answered it (lockout,
   // unverified e-mail, rate limit) — the login page maps each to a message.
   return NextResponse.json(result.body, { status: result.status });
+}
+
+/**
+ * Second step of a two-factor login. The challenge comes from the HttpOnly
+ * cookie set by handleLogin, never from the request body: a challenge the page
+ * could supply is a challenge an attacker could supply.
+ */
+export async function handleTwoFactorLogin(request: NextRequest): Promise<NextResponse> {
+  const limited = enforceAuthRateLimit(request);
+  if (limited) return limited;
+
+  const challengeToken = request.cookies.get(CHALLENGE_COOKIE)?.value;
+  if (!challengeToken) {
+    return NextResponse.json(
+      { error: 'Sesja logowania wygasła. Zaloguj się ponownie.' },
+      { status: 401 },
+    );
+  }
+
+  const payload = (await request.json().catch(() => null)) as
+    | { code?: string; recoveryCode?: string }
+    | null;
+  const code = payload?.code?.trim();
+  const recoveryCode = payload?.recoveryCode?.trim();
+  if (!code && !recoveryCode) {
+    return NextResponse.json({ error: 'Podaj kod z aplikacji lub kod odzyskiwania.' }, { status: 400 });
+  }
+
+  // Prefer the authenticator code. authservice only falls through to the
+  // recovery code when `code` is absent, so sending both would spend a
+  // single-use recovery code that was never needed.
+  const result = await authservice.twoFactorLogin(
+    challengeToken,
+    code ? { code } : { recoveryCode: recoveryCode as string },
+  );
+
+  if (result.tokens) {
+    const response = NextResponse.json({ ok: true });
+    setAuthCookies(response, result.tokens);
+    clearChallengeCookie(response);
+    return response;
+  }
+
+  // A dead challenge (expired, or already spent) must not linger: leaving it
+  // set turns one expired attempt into a loop the user cannot escape without
+  // clearing cookies by hand.
+  const failure = NextResponse.json(result.body, { status: result.status });
+  if (result.status === 401) {
+    clearChallengeCookie(failure);
+  }
+  return failure;
 }
 
 export async function handleRegister(request: NextRequest): Promise<NextResponse> {

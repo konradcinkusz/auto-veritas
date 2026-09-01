@@ -221,3 +221,41 @@ does nothing against a distributed flood, which belongs at the edge/CDN.
 Rejected: a shared store (Redis) for a correct global quota, which adds a
 stateful dependency to a stack that currently has exactly one, for a threat
 this product does not yet face.
+
+
+## D-16 — The 2FA challenge token lives in an HttpOnly cookie, not in the page (2026-09-01)
+
+Completes backlog item 4. authservice's login returns `200` with either a
+`TokenResponse` or a `TwoFactorRequiredResponse { requiresTwoFactor,
+challengeToken, expiresIn: 300 }`; the second is completed at
+`POST /api/v1/auth/2fa/login` with the challenge plus either an authenticator
+code or a single-use recovery code. (Contract read from authservice at tag
+`v0.3.1` — the version compose and Fly both pin — not assumed.)
+
+**The BFF keeps the challenge; the browser never sees it.** Before this change
+the challenge body was passed straight through to the login page. authservice
+describes the token as "useless for anything except completing this login", and
+that is true — but it is still a bearer artifact that finishes an
+authentication, and this BFF's entire premise is that such artifacts live in
+HttpOnly cookies where page scripts cannot reach them. Passing it to the page
+would have made the second factor the one credential in the system handled
+differently from every other. The page is told only `{ requiresTwoFactor: true }`.
+
+Consequences taken deliberately:
+
+- **The cookie's `maxAge` matches authservice's `ExpiresIn` (300s)** rather than
+  a rounder number, so the browser and the server stop trusting it together.
+- **The challenge is read from the cookie and never from the request body.** A
+  challenge the page can supply is a challenge an attacker can supply.
+- **Exactly one second factor is sent.** authservice checks `code` first and
+  only falls through to `recoveryCode` when it is absent, so forwarding both
+  would silently spend a single-use recovery code on a request the
+  authenticator could have served.
+- **A dead challenge is cleared on 401.** Leaving it set turns one expired
+  attempt into a loop the user cannot escape without clearing cookies by hand;
+  the page drops back to the password step and says so.
+
+Not built: enabling/disabling 2FA from this UI. authservice exposes
+`/2fa/enable`, `/verify`, `/disable` and `/recovery-codes`, but this product's
+frontend is deliberately read-only apart from authentication itself, and
+enrolment is account management rather than sign-in.

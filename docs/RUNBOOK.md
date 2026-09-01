@@ -26,6 +26,26 @@ actually does today — the compose file, `.github/workflows/flyio.yml` and
 Compose alone needs only Docker. The other two are for the Aspire path, the
 test suites, and the e2e run.
 
+### One-time: install the secret-scanning hook
+
+```bash
+pip install pre-commit   # or pipx / brew
+pre-commit install
+```
+
+`.pre-commit-config.yaml` runs gitleaks over your staged changes and refuses
+the commit if it finds a credential. It reads the same `.gitleaks.toml` as the
+CI job, so there is no second rule set to drift.
+
+This is worth the thirty seconds: CI catches a leaked secret only once it is
+already in git history, and at that point the rule in
+[`../flyio/SECRETS.md`](../flyio/SECRETS.md) applies — *"a secret that lands in
+git history is rotated FIRST, scrubbed second."* Blocking the commit is far
+cheaper than rotating a signing key.
+
+The hook protects whoever installs it; the CI job remains the enforcement
+layer for everyone else.
+
 ---
 
 ## Option A — local via Docker Compose

@@ -1,0 +1,19 @@
+# Secret scanning on the way IN, not after the fact.
+#
+# The CI job in .github/workflows/secret-scan.yml stays the enforcement layer —
+# a hook only protects whoever installed it. But CI catches a leaked secret
+# once it is already in git history, and at that point flyio/SECRETS.md's rule
+# applies: "a secret that lands in git history is rotated FIRST, scrubbed
+# second". Blocking the commit is enormously cheaper than rotating a key.
+#
+# One-time setup after cloning (documented in docs/RUNBOOK.md):
+#   pip install pre-commit && pre-commit install
+#
+# gitleaks discovers .gitleaks.toml in the repo root on its own, so the hook and
+# the CI job share one rule set and one allowlist — there is no second, drifting
+# copy of the config to keep in sync.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

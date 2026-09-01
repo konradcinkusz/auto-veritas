@@ -77,4 +77,12 @@ became server-enforced domain rules rather than table copy.
    verifications. [freshness model fidelity]
 6. **OAuth provider buttons** rendered from authservice's `/providers` discovery
    (only if the owner configures Google/GitHub). [D-12]
-7. **Saved filters / shareable views** for comparing shortlists. [convenience]
+7. ~~**Saved filters / shareable views** for comparing shortlists~~ —
+   **half built**: filter and sort state now round-trips through the query
+   string, so a view survives a refresh and can be pasted to another signed-in
+   user. Written with `history.replaceState`, not `router.replace`, so typing
+   in the search box does not run the App Router's navigation machinery per
+   keystroke; parameters at their default are omitted so a shared link stays
+   readable. Still open: *named* saved filters, which need per-user
+   persistence and a new API surface — deliberately split out rather than
+   bundled, since it is a materially larger change than URL state.

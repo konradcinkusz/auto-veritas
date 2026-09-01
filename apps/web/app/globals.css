@@ -287,6 +287,29 @@ tr.history-row td { padding: 12px 16px; }
 .history-table tbody td { padding: 5px 10px; color: var(--text-dim); }
 .history-table tbody tr:not(:last-child) td { border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
 
+/* Per-row detail panel: the trust dates and the source behind the number */
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.details-item dt {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.details-item dd { margin: 0; color: var(--text); }
+/* The source spans the row: a URL is long and should not squeeze the dates. */
+.details-source { grid-column: 1 / -1; }
+.details-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+.details-link:hover { color: var(--accent-2); }
+.details-nosource { color: var(--text-dim); font-style: italic; }
+
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 0.75rem; color: var(--text-dim); }
 .legend span.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
 

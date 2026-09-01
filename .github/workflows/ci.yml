@@ -118,3 +118,56 @@ jobs:
       - name: Teardown
         if: always()
         run: docker compose down -v
+
+  e2e-core:
+    # The core-regression tier from e2e/CHARTER.md: dashboard behaviour that is
+    # not smoke-critical but expensive to break. Runs as its own job alongside
+    # e2e-smoke rather than inside it, so the smoke gate's result stays readable
+    # on its own and a core failure names itself. Path-filtering it was
+    # considered and rejected: the two jobs run concurrently, so core costs
+    # runner minutes but no extra wall-clock on the gate, and a core tier that
+    # is skipped by default is a core tier nobody notices has rotted.
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate an ephemeral RS256 dev key
+        run: ./scripts/generate-jwt-key.sh
+      - name: Boot the stack
+        run: docker compose up --build --detach
+      - name: Wait for readiness
+        run: |
+          for url in \
+            http://localhost:8081/health/ready \
+            http://localhost:8082/health/ready \
+            http://localhost:3000/healthz; do
+            for i in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null 2>&1; then echo "$url ready"; break; fi
+              if [ "$i" = 60 ]; then echo "::error::$url never became ready"; docker compose logs; exit 1; fi
+              sleep 2
+            done
+          done
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm --filter auto-veritas-e2e exec playwright install --with-deps chromium
+      - name: Run core suite
+        env:
+          BASE_URL: http://localhost:3000
+          AUTH_URL: http://localhost:8081
+          OFFERS_URL: http://localhost:8082
+        run: pnpm --filter auto-veritas-e2e run test:core
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-core
+          path: e2e/playwright-report
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
